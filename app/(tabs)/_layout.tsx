@@ -1,33 +1,42 @@
 import { Tabs } from 'expo-router';
-import React from 'react';
-
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Text } from 'react-native';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
+        tabBarActiveTintColor: '#007AFF',
+        tabBarInactiveTintColor: 'gray',
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'SNS對話',
+          tabBarLabel: 'CHAT',
+          tabBarIcon: ({ color }) => (
+            <Text style={{ fontSize: 24, color }}>💬</Text>
+          ),
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="screen2"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: '聊天室',
+          tabBarLabel: 'ROOM',
+          tabBarIcon: ({ color }) => (
+            <Text style={{ fontSize: 24, color }}>🏠</Text>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="screen3"
+        options={{
+          title: '設定',
+          tabBarLabel: 'NEW',
+          tabBarIcon: ({ color }) => (
+            <Text style={{ fontSize: 24, color }}>⚙️</Text>
+          ),
         }}
       />
     </Tabs>

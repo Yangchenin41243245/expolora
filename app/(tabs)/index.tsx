@@ -1,98 +1,159 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+interface Message {
+  id: string;
+  text: string;
+  isUser: boolean;
+  time: Date;
+}
 
-export default function HomeScreen() {
+export default function Screen1() {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      text: '你好！歡迎使用聊天室 👋',
+      isUser: false,
+      time: new Date(),
+    },
+  ]);
+  const [inputText, setInputText] = useState('');
+
+  const sendMessage = () => {
+    if (inputText.trim() === '') return;
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      text: inputText,
+      isUser: true,
+      time: new Date(),
+    };
+    setMessages(prev => [newMessage, ...prev]);
+    setInputText('');
+
+    setTimeout(() => {
+      const replyMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: '這是自動回覆！',
+        isUser: false,
+        time: new Date(),
+      };
+      setMessages(prev => [replyMessage, ...prev]);
+    }, 1000);
+  };
+
+  const renderMessage = ({ item }: { item: Message }) => (
+    <View
+      style={[
+        styles.messageBubble,
+        item.isUser ? styles.userMessage : styles.otherMessage,
+      ]}
+    >
+      <Text style={styles.messageText}>{item.text}</Text>
+      <Text style={styles.timeText}>
+        {item.time.toLocaleTimeString('zh-TW', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })}
+      </Text>
+    </View>
+  );
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
+      <FlatList
+        data={messages}
+        renderItem={renderMessage}
+        keyExtractor={item => item.id}
+        inverted
+        style={styles.messageList}
+      />
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.input}
+          value={inputText}
+          onChangeText={setInputText}
+          placeholder="輸入訊息..."
+          onSubmitEditing={sendMessage}
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
-
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+        <TouchableOpacity style={styles.sendButton} onPress={sendMessage}>
+          <Text style={styles.sendButtonText}>發送</Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+    backgroundColor: '#E5DDD5',
+  },
+  messageList: {
+    flex: 1,
+    paddingHorizontal: 10,
+  },
+  messageBubble: {
+    maxWidth: '80%',
+    padding: 12,
+    borderRadius: 15,
+    marginVertical: 5,
+  },
+  userMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#06C755',
+  },
+  otherMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+  },
+  messageText: {
+    fontSize: 16,
+    color: '#000',
+  },
+  timeText: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  inputContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    padding: 10,
+    backgroundColor: '#F0F0F0',
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  input: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    marginRight: 10,
+    fontSize: 16,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  sendButton: {
+    backgroundColor: '#06C755',
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+  },
+  sendButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });
