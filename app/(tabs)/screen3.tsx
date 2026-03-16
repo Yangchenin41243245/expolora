@@ -8,17 +8,25 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 
 // ── 設定區 ──────────────────────────────────────────────
-// 熱點連線時，把這裡改成電腦的 IP（例如 10.165.0.78）
 const DEFAULT_HOST = '10.165.0.78';
 const PORT = 5000;
-const POLL_INTERVAL_MS = 10000; // 每 10 秒自動刷新
+const POLL_INTERVAL_MS = 10000;
 
-const ENDPOINTS = ['/messages', '/status', '/identity'] as const;
-type Endpoint = (typeof ENDPOINTS)[number];
+// 端點分組
+const ENDPOINT_GROUPS = {
+  診斷: ['/status', '/identity', '/messages'],
+  聯絡人: ['/getContactList', '/getBlocklist'],
+  Lobby: ['/getLobby'],
+} as const;
+
+type Group = keyof typeof ENDPOINT_GROUPS;
+type Endpoint = (typeof ENDPOINT_GROUPS)[Group][number];
+
+const ALL_ENDPOINTS: Endpoint[] = Object.values(ENDPOINT_GROUPS).flat() as Endpoint[];
 // ────────────────────────────────────────────────────────
 
 type FetchState = {
@@ -38,12 +46,15 @@ const initState = (): FetchState => ({
 const Screen3: React.FC = () => {
   const [host, setHost] = useState(DEFAULT_HOST);
   const [editingHost, setEditingHost] = useState(DEFAULT_HOST);
-  const [activeTab, setActiveTab] = useState<Endpoint>('/messages');
-  const [states, setStates] = useState<Record<Endpoint, FetchState>>({
-    '/messages': initState(),
-    '/status': initState(),
-    '/identity': initState(),
-  });
+  const [activeGroup, setActiveGroup] = useState<Group>('診斷');
+  const [activeEndpoint, setActiveEndpoint] = useState<Endpoint>('/status');
+  const [states, setStates] = useState<Record<Endpoint, FetchState>>(
+    () =>
+      Object.fromEntries(ALL_ENDPOINTS.map(ep => [ep, initState()])) as Record<
+        Endpoint,
+        FetchState
+      >
+  );
   const [autoRefresh, setAutoRefresh] = useState(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -80,15 +91,13 @@ const Screen3: React.FC = () => {
   );
 
   const fetchAll = useCallback(() => {
-    ENDPOINTS.forEach(ep => fetchEndpoint(ep));
+    ALL_ENDPOINTS.forEach(ep => fetchEndpoint(ep));
   }, [fetchEndpoint]);
 
-  // 初次載入 + host 改變時拉一次
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
 
-  // 自動輪詢
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (autoRefresh) {
@@ -99,14 +108,19 @@ const Screen3: React.FC = () => {
     };
   }, [autoRefresh, fetchAll]);
 
-  const applyHost = () => {
-    setHost(editingHost.trim());
+  const applyHost = () => setHost(editingHost.trim());
+
+  // 切換群組時自動選第一個端點
+  const handleGroupChange = (group: Group) => {
+    setActiveGroup(group);
+    setActiveEndpoint(ENDPOINT_GROUPS[group][0]);
   };
 
-  const current = states[activeTab];
+  const current = states[activeEndpoint];
 
   return (
     <View style={styles.container}>
+
       {/* ── Host 設定列 ── */}
       <View style={styles.hostRow}>
         <TextInput
@@ -131,15 +145,30 @@ const Screen3: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* ── 端點 Tab ── */}
+      {/* ── 群組 Tab ── */}
+      <View style={styles.groupRow}>
+        {(Object.keys(ENDPOINT_GROUPS) as Group[]).map(group => (
+          <TouchableOpacity
+            key={group}
+            style={[styles.groupTab, activeGroup === group && styles.groupTabActive]}
+            onPress={() => handleGroupChange(group)}
+          >
+            <Text style={[styles.groupTabText, activeGroup === group && styles.groupTabTextActive]}>
+              {group}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* ── 端點 Tab（該群組下） ── */}
       <View style={styles.tabRow}>
-        {ENDPOINTS.map(ep => (
+        {ENDPOINT_GROUPS[activeGroup].map(ep => (
           <TouchableOpacity
             key={ep}
-            style={[styles.tab, activeTab === ep && styles.tabActive]}
-            onPress={() => setActiveTab(ep)}
+            style={[styles.tab, activeEndpoint === ep && styles.tabActive]}
+            onPress={() => setActiveEndpoint(ep as Endpoint)}
           >
-            <Text style={[styles.tabText, activeTab === ep && styles.tabTextActive]}>
+            <Text style={[styles.tabText, activeEndpoint === ep && styles.tabTextActive]}>
               {ep}
             </Text>
           </TouchableOpacity>
@@ -154,7 +183,7 @@ const Screen3: React.FC = () => {
             : '尚未載入'}
         </Text>
         {current.loading && <ActivityIndicator size="small" color="#4a90e2" />}
-        <TouchableOpacity onPress={() => fetchEndpoint(activeTab)}>
+        <TouchableOpacity onPress={() => fetchEndpoint(activeEndpoint)}>
           <Text style={styles.refreshBtn}>↻ 刷新</Text>
         </TouchableOpacity>
       </View>
@@ -165,7 +194,7 @@ const Screen3: React.FC = () => {
         refreshControl={
           <RefreshControl
             refreshing={current.loading}
-            onRefresh={() => fetchEndpoint(activeTab)}
+            onRefresh={() => fetchEndpoint(activeEndpoint)}
           />
         }
       >
@@ -174,7 +203,8 @@ const Screen3: React.FC = () => {
             <Text style={styles.errorTitle}>⚠ 連線失敗</Text>
             <Text style={styles.errorMsg}>{current.error}</Text>
             <Text style={styles.errorHint}>
-              請確認：{'\n'}• 手機連至電腦熱點{'\n'}• 電腦 IP 為 {host}{'\n'}• Flask 執行於 port {PORT}
+              請確認：{'\n'}• 手機連至電腦熱點{'\n'}• 電腦 IP 為 {host}{'\n'}• Flask 執行於 port{' '}
+              {PORT}
             </Text>
           </View>
         ) : current.data == null ? (
@@ -275,19 +305,39 @@ const styles = StyleSheet.create({
   toggleBtnOn: { backgroundColor: '#2a7a2a' },
   toggleBtnText: { color: '#fff', fontSize: 12 },
 
+  // 群組 Tab
+  groupRow: {
+    flexDirection: 'row',
+    backgroundColor: '#12141e',
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    gap: 6,
+  },
+  groupTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#1e2130',
+  },
+  groupTabActive: { backgroundColor: '#4a90e2' },
+  groupTabText: { color: '#666', fontSize: 12, fontFamily: 'monospace' },
+  groupTabTextActive: { color: '#fff', fontWeight: 'bold' },
+
+  // 端點 Tab
   tabRow: {
     flexDirection: 'row',
     backgroundColor: '#1a1d27',
     borderBottomWidth: 1,
     borderBottomColor: '#2a2d3a',
+    paddingTop: 4,
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 9,
     alignItems: 'center',
   },
   tabActive: { borderBottomWidth: 2, borderBottomColor: '#4a90e2' },
-  tabText: { color: '#666', fontSize: 12, fontFamily: 'monospace' },
+  tabText: { color: '#555', fontSize: 11, fontFamily: 'monospace' },
   tabTextActive: { color: '#4a90e2' },
 
   statusBar: {
