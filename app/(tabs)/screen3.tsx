@@ -13,10 +13,14 @@ import {
 
 // ── 設定區 ──────────────────────────────────────────────
 const DEFAULT_HOST = '10.165.0.78';
-const PORT = 5000;
-const POLL_INTERVAL_MS = 10000;
+const DEFAULT_PORT = 5000;
+const POLL_INTERVAL_MS = 5000;
 
-// 端點分組
+// ── 測試訊息設定（dest_hash 由 getLobby 動態取得）──────
+const TEST_MESSAGE  = 'hello from mobile test';
+const TEST_IS_SAVED = false; // false = msgDirect, true = msgContact
+// ────────────────────────────────────────────────────────
+
 const ENDPOINT_GROUPS = {
   診斷: ['/status', '/identity', '/messages'],
   聯絡人: ['/getContactList', '/getBlocklist'],
@@ -27,13 +31,18 @@ type Group = keyof typeof ENDPOINT_GROUPS;
 type Endpoint = (typeof ENDPOINT_GROUPS)[Group][number];
 
 const ALL_ENDPOINTS: Endpoint[] = Object.values(ENDPOINT_GROUPS).flat() as Endpoint[];
-// ────────────────────────────────────────────────────────
 
 type FetchState = {
   data: unknown;
   loading: boolean;
   error: string | null;
   lastUpdated: Date | null;
+};
+
+type SendState = {
+  loading: boolean;
+  result: unknown;
+  error: string | null;
 };
 
 const initState = (): FetchState => ({
@@ -43,9 +52,26 @@ const initState = (): FetchState => ({
   lastUpdated: null,
 });
 
+const initSendState = (): SendState => ({
+  loading: false,
+  result: null,
+  error: null,
+});
+
+// ── getLobby 回傳結構 ───────────────────────────────────
+type LobbyPeer = { dest_hash: string; announced_name?: string; online?: boolean };
+type LobbyData = { data?: { lobby?: LobbyPeer[] } };
+
+// ── 主元件 ──────────────────────────────────────────────
 const Screen3: React.FC = () => {
   const [host, setHost] = useState(DEFAULT_HOST);
+  const [port, setPort] = useState(DEFAULT_PORT);
   const [editingHost, setEditingHost] = useState(DEFAULT_HOST);
+  const [editingPort, setEditingPort] = useState(String(DEFAULT_PORT));
+
+  const hostRef = useRef(DEFAULT_HOST);
+  const portRef = useRef(DEFAULT_PORT);
+
   const [activeGroup, setActiveGroup] = useState<Group>('診斷');
   const [activeEndpoint, setActiveEndpoint] = useState<Endpoint>('/status');
   const [states, setStates] = useState<Record<Endpoint, FetchState>>(
@@ -58,68 +84,156 @@ const Screen3: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchEndpoint = useCallback(
-    async (endpoint: Endpoint) => {
+  const [sendState, setSendState] = useState<SendState>(initSendState());
+
+  useEffect(() => { hostRef.current = host; }, [host]);
+  useEffect(() => { portRef.current = port; }, [port]);
+
+  const fetchEndpoint = useCallback(async (endpoint: Endpoint) => {
+    setStates(prev => ({
+      ...prev,
+      [endpoint]: { ...prev[endpoint], loading: true, error: null },
+    }));
+    try {
+      const res = await fetch(
+        `http://${hostRef.current}:${portRef.current}${endpoint}`,
+        { headers: { Accept: 'application/json' } }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
       setStates(prev => ({
         ...prev,
-        [endpoint]: { ...prev[endpoint], loading: true, error: null },
+        [endpoint]: { data: json, loading: false, error: null, lastUpdated: new Date() },
       }));
-      try {
-        const res = await fetch(`http://${host}:${PORT}${endpoint}`, {
-          headers: { Accept: 'application/json' },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        setStates(prev => ({
-          ...prev,
-          [endpoint]: {
-            data: json,
-            loading: false,
-            error: null,
-            lastUpdated: new Date(),
-          },
-        }));
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setStates(prev => ({
-          ...prev,
-          [endpoint]: { ...prev[endpoint], loading: false, error: msg },
-        }));
-      }
-    },
-    [host]
-  );
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setStates(prev => ({
+        ...prev,
+        [endpoint]: { ...prev[endpoint], loading: false, error: msg },
+      }));
+    }
+  }, []);
 
   const fetchAll = useCallback(() => {
     ALL_ENDPOINTS.forEach(ep => fetchEndpoint(ep));
   }, [fetchEndpoint]);
 
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (autoRefresh) {
       timerRef.current = setInterval(fetchAll, POLL_INTERVAL_MS);
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [autoRefresh, fetchAll]);
 
-  const applyHost = () => setHost(editingHost.trim());
+  const applySettings = () => {
+    const trimmedHost = editingHost.trim();
+    const parsed = parseInt(editingPort.trim(), 10);
+    const validPort = !isNaN(parsed) && parsed > 0 && parsed <= 65535 ? parsed : port;
+    hostRef.current = trimmedHost;
+    portRef.current = validPort;
+    setHost(trimmedHost);
+    setPort(validPort);
+    ALL_ENDPOINTS.forEach(ep => fetchEndpoint(ep));
+  };
 
-  // 切換群組時自動選第一個端點
   const handleGroupChange = (group: Group) => {
     setActiveGroup(group);
     setActiveEndpoint(ENDPOINT_GROUPS[group][0]);
+  };
+
+  // ── 從 getLobby 狀態取第一個節點的 dest_hash ──────────
+  const lobbyData = states['/getLobby'].data as LobbyData | null;
+  const lobbyPeers = lobbyData?.data?.lobby ?? [];
+  const firstPeer  = lobbyPeers[0] ?? null;
+  const firstPeerHash = firstPeer?.dest_hash ?? null;
+
+  // ── 傳送測試訊息 ──────────────────────────────────────
+  const handleSendTest = async () => {
+    if (!firstPeerHash) {
+      setSendState({
+        loading: false,
+        result: null,
+        error: 'Lobby 中沒有可用節點，請先確認 /getLobby 有回傳資料',
+      });
+      return;
+    }
+    setSendState({ loading: true, result: null, error: null });
+    const endpoint = TEST_IS_SAVED ? '/msgContact' : '/msgDirect';
+    try {
+      const res = await fetch(
+        `http://${hostRef.current}:${portRef.current}${endpoint}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ dest_hash: firstPeerHash, message: TEST_MESSAGE }),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) {
+        setSendState({
+          loading: false,
+          result: null,
+          error: `HTTP ${res.status}: ${JSON.stringify(json)}`,
+        });
+      } else {
+        setSendState({ loading: false, result: json, error: null });
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setSendState({ loading: false, result: null, error: msg });
+    }
   };
 
   const current = states[activeEndpoint];
 
   return (
     <View style={styles.container}>
+
+      {/* ── 傳送測試訊息列 ── */}
+      <View style={styles.testSendRow}>
+        <View style={styles.testSendInfo}>
+          <Text style={styles.testSendLabel}>測試傳送</Text>
+          <Text style={styles.testSendMeta} numberOfLines={1}>
+            {firstPeerHash
+              ? `${TEST_IS_SAVED ? 'msgContact' : 'msgDirect'} → ${firstPeerHash.slice(0, 12)}…`
+              : 'Lobby 尚無節點'}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.testSendBtn,
+            (!firstPeerHash || sendState.loading) && styles.testSendBtnDisabled,
+          ]}
+          onPress={handleSendTest}
+          disabled={!firstPeerHash || sendState.loading}
+        >
+          {sendState.loading
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Text style={styles.testSendBtnText}>📤 送出測試</Text>
+          }
+        </TouchableOpacity>
+      </View>
+
+      {/* 傳送結果提示列 */}
+      {(sendState.result !== null || sendState.error !== null) && (
+        <View style={[
+          styles.sendResultBar,
+          sendState.error ? styles.sendResultError : styles.sendResultSuccess,
+        ]}>
+          <Text style={styles.sendResultText} numberOfLines={2}>
+            {sendState.error
+              ? `⚠ ${sendState.error}`
+              : `✓ ${JSON.stringify((sendState.result as any)?.actions ?? 'sent')}`
+            }
+          </Text>
+          <TouchableOpacity onPress={() => setSendState(initSendState())}>
+            <Text style={styles.sendResultClose}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ── Host 設定列 ── */}
       <View style={styles.hostRow}>
@@ -130,9 +244,9 @@ const Screen3: React.FC = () => {
           placeholder="電腦 IP"
           autoCapitalize="none"
           keyboardType="numbers-and-punctuation"
-          onSubmitEditing={applyHost}
+          onSubmitEditing={applySettings}
         />
-        <TouchableOpacity style={styles.applyBtn} onPress={applyHost}>
+        <TouchableOpacity style={styles.applyBtn} onPress={applySettings}>
           <Text style={styles.applyBtnText}>套用</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -143,6 +257,20 @@ const Screen3: React.FC = () => {
             {autoRefresh ? '⏸ 暫停' : '▶ 自動'}
           </Text>
         </TouchableOpacity>
+      </View>
+
+      {/* ── Port 設定列 ── */}
+      <View style={styles.portRow}>
+        <Text style={styles.portLabel}>Port</Text>
+        <TextInput
+          style={styles.portInput}
+          value={editingPort}
+          onChangeText={setEditingPort}
+          placeholder="5000"
+          autoCapitalize="none"
+          keyboardType="number-pad"
+          onSubmitEditing={applySettings}
+        />
       </View>
 
       {/* ── 群組 Tab ── */}
@@ -160,7 +288,7 @@ const Screen3: React.FC = () => {
         ))}
       </View>
 
-      {/* ── 端點 Tab（該群組下） ── */}
+      {/* ── 端點 Tab ── */}
       <View style={styles.tabRow}>
         {ENDPOINT_GROUPS[activeGroup].map(ep => (
           <TouchableOpacity
@@ -203,8 +331,8 @@ const Screen3: React.FC = () => {
             <Text style={styles.errorTitle}>⚠ 連線失敗</Text>
             <Text style={styles.errorMsg}>{current.error}</Text>
             <Text style={styles.errorHint}>
-              請確認：{'\n'}• 手機連至電腦熱點{'\n'}• 電腦 IP 為 {host}{'\n'}• Flask 執行於 port{' '}
-              {PORT}
+              請確認：{'\n'}• 電腦連至手機熱點{'\n'}• 電腦 IP 為 {host}{'\n'}
+              • Flask 執行於 port {port}
             </Text>
           </View>
         ) : current.data == null ? (
@@ -221,7 +349,8 @@ const Screen3: React.FC = () => {
 const JsonViewer: React.FC<{ data: unknown; depth: number }> = ({ data, depth }) => {
   const indent = depth * 12;
 
-  if (data === null) return <Text style={[styles.jNull, { marginLeft: indent }]}>null</Text>;
+  if (data === null)
+    return <Text style={[styles.jNull, { marginLeft: indent }]}>null</Text>;
   if (typeof data === 'boolean')
     return <Text style={[styles.jBool, { marginLeft: indent }]}>{data ? 'true' : 'false'}</Text>;
   if (typeof data === 'number')
@@ -272,6 +401,44 @@ const JsonViewer: React.FC<{ data: unknown; depth: number }> = ({ data, depth })
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f1117' },
 
+  testSendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#12141e',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e2130',
+    gap: 8,
+  },
+  testSendInfo: { flex: 1 },
+  testSendLabel: { color: '#aaa', fontSize: 12, fontFamily: 'monospace' },
+  testSendMeta: { color: '#555', fontSize: 11, fontFamily: 'monospace', marginTop: 1 },
+  testSendBtn: {
+    backgroundColor: '#2a5298',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    minWidth: 110,
+    alignItems: 'center',
+  },
+  testSendBtnDisabled: { opacity: 0.4 },
+  testSendBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+
+  sendResultBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 8,
+  },
+  sendResultSuccess: { backgroundColor: '#1a3320' },
+  sendResultError: { backgroundColor: '#2a1515' },
+  sendResultText: { flex: 1, fontFamily: 'monospace', fontSize: 11, color: '#ccc' },
+  sendResultClose: { color: '#666', fontSize: 14, paddingLeft: 8 },
+
   hostRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -289,23 +456,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'monospace',
   },
-  applyBtn: {
-    backgroundColor: '#4a90e2',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
+  applyBtn: { backgroundColor: '#4a90e2', borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7 },
   applyBtnText: { color: '#fff', fontSize: 13 },
-  toggleBtn: {
-    backgroundColor: '#333',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
+  toggleBtn: { backgroundColor: '#333', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7 },
   toggleBtnOn: { backgroundColor: '#2a7a2a' },
   toggleBtnText: { color: '#fff', fontSize: 12 },
 
-  // 群組 Tab
+  portRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingBottom: 10,
+    backgroundColor: '#1a1d27',
+    gap: 8,
+  },
+  portLabel: { color: '#888', fontSize: 13, fontFamily: 'monospace', width: 36 },
+  portInput: {
+    width: 100,
+    backgroundColor: '#252836',
+    color: '#e0e0e0',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 13,
+    fontFamily: 'monospace',
+  },
+
   groupRow: {
     flexDirection: 'row',
     backgroundColor: '#12141e',
@@ -313,17 +489,11 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     gap: 6,
   },
-  groupTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: '#1e2130',
-  },
+  groupTab: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: '#1e2130' },
   groupTabActive: { backgroundColor: '#4a90e2' },
   groupTabText: { color: '#666', fontSize: 12, fontFamily: 'monospace' },
   groupTabTextActive: { color: '#fff', fontWeight: 'bold' },
 
-  // 端點 Tab
   tabRow: {
     flexDirection: 'row',
     backgroundColor: '#1a1d27',
@@ -331,11 +501,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#2a2d3a',
     paddingTop: 4,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 9,
-    alignItems: 'center',
-  },
+  tab: { flex: 1, paddingVertical: 9, alignItems: 'center' },
   tabActive: { borderBottomWidth: 2, borderBottomColor: '#4a90e2' },
   tabText: { color: '#555', fontSize: 11, fontFamily: 'monospace' },
   tabTextActive: { color: '#4a90e2' },
@@ -366,15 +532,14 @@ const styles = StyleSheet.create({
   errorMsg: { color: '#ef9a9a', fontFamily: 'monospace', fontSize: 13 },
   errorHint: { color: '#888', fontSize: 12, marginTop: 12, lineHeight: 20 },
 
-  // JSON 顏色（VS Code Dark 風格）
   jBracket: { color: '#d4d4d4', fontFamily: 'monospace', fontSize: 13 },
-  jKey: { color: '#9cdcfe', fontFamily: 'monospace', fontSize: 13 },
-  jStr: { color: '#ce9178', fontFamily: 'monospace', fontSize: 13 },
-  jNum: { color: '#b5cea8', fontFamily: 'monospace', fontSize: 13 },
-  jBool: { color: '#569cd6', fontFamily: 'monospace', fontSize: 13 },
-  jNull: { color: '#569cd6', fontFamily: 'monospace', fontSize: 13 },
-  jRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
-  jPunct: { color: '#d4d4d4', fontFamily: 'monospace', fontSize: 13 },
+  jKey:     { color: '#9cdcfe', fontFamily: 'monospace', fontSize: 13 },
+  jStr:     { color: '#ce9178', fontFamily: 'monospace', fontSize: 13 },
+  jNum:     { color: '#b5cea8', fontFamily: 'monospace', fontSize: 13 },
+  jBool:    { color: '#569cd6', fontFamily: 'monospace', fontSize: 13 },
+  jNull:    { color: '#569cd6', fontFamily: 'monospace', fontSize: 13 },
+  jRow:     { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
+  jPunct:   { color: '#d4d4d4', fontFamily: 'monospace', fontSize: 13 },
 });
 
 export default Screen3;
