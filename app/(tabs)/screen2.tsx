@@ -1,196 +1,188 @@
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
+  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import WebView from 'react-native-webview';
+import { useMessaging } from '../context/MessagingContext';
 
-export default function Screen2() {
-  const [inputUrl, setInputUrl] = useState('https://www.google.com');
-  const [currentUrl, setCurrentUrl] = useState('https://www.google.com');
-  const [loading, setLoading] = useState(false);
-  const [canGoBack, setCanGoBack] = useState(false);
-  const [canGoForward, setCanGoForward] = useState(false);
-  const webViewRef = useRef<WebView>(null);
-
-  const normalizeUrl = (url: string): string => {
-    const trimmed = url.trim();
-    if (!/^https?:\/\//i.test(trimmed)) {
-      return 'https://' + trimmed;
-    }
-    return trimmed;
+// ── 型別 ──────────────────────────────────────────────
+type IdentityInfo = {
+  identity: {
+    hash: string;
+    path: string;
+    loaded: boolean;
   };
-
-  const handleGo = () => {
-    const normalized = normalizeUrl(inputUrl);
-    setInputUrl(normalized);
-    setCurrentUrl(normalized);
+  destination_in: {
+    hash: string;
+    path: string;
+    loaded: boolean;
   };
+};
 
-  const handleBack = () => webViewRef.current?.goBack();
-  const handleForward = () => webViewRef.current?.goForward();
-  const handleReload = () => webViewRef.current?.reload();
-
+// ── 工具元件 ──────────────────────────────────────────
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      {/* 網址列 */}
-      <View style={styles.toolbar}>
-        <TextInput
-          style={styles.input}
-          value={inputUrl}
-          onChangeText={setInputUrl}
-          onSubmitEditing={handleGo}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          returnKeyType="go"
-          placeholder="輸入網址..."
-          placeholderTextColor="#999"
-        />
-        <TouchableOpacity style={styles.goButton} onPress={handleGo}>
-          <Text style={styles.goButtonText}>前往</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* 載入進度條 */}
-      {loading && (
-        <ActivityIndicator
-          style={styles.loader}
-          size="small"
-          color="#007AFF"
-        />
-      )}
-
-      {/* WebView */}
-      <WebView
-        ref={webViewRef}
-        source={{ uri: currentUrl }}
-        style={styles.webview}
-        onLoadStart={() => setLoading(true)}
-        onLoadEnd={() => setLoading(false)}
-        onNavigationStateChange={(navState) => {
-          setInputUrl(navState.url);
-          setCanGoBack(navState.canGoBack);
-          setCanGoForward(navState.canGoForward);
-        }}
-      />
-
-      {/* 底部導航列 */}
-      <View style={styles.navBar}>
-        <TouchableOpacity
-          style={[styles.navButton, !canGoBack && styles.navButtonDisabled]}
-          onPress={handleBack}
-          disabled={!canGoBack}
-        >
-          <Text style={[styles.navIcon, !canGoBack && styles.navIconDisabled]}>
-            ◀
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.navButton, !canGoForward && styles.navButtonDisabled]}
-          onPress={handleForward}
-          disabled={!canGoForward}
-        >
-          <Text style={[styles.navIcon, !canGoForward && styles.navIconDisabled]}>
-            ▶
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navButton} onPress={handleReload}>
-          <Text style={styles.navIcon}>↺</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navButton}
-          onPress={() => {
-            setInputUrl('https://www.google.com');
-            setCurrentUrl('https://www.google.com');
-          }}
-        >
-          <Text style={styles.navIcon}>⌂</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+    <View style={styles.infoRow}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue} selectable>{value}</Text>
+    </View>
   );
 }
 
+// ── 主元件 ────────────────────────────────────────────
+export default function Screen2() {
+  const { baseUrl } = useMessaging();
+
+  const [identity, setIdentity] = useState<IdentityInfo | null>(null);
+  const [identityLoading, setIdentityLoading] = useState(false);
+  const [identityError, setIdentityError] = useState<string | null>(null);
+
+  const fetchIdentity = useCallback(async () => {
+    setIdentityLoading(true);
+    setIdentityError(null);
+    try {
+      const res = await fetch(`${baseUrl}/identity`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (res.status === 503) {
+        setIdentityError('RNS 節點尚未初始化，請稍後再試。');
+        return;
+      }
+      if (!res.ok) {
+        setIdentityError(`伺服器錯誤：HTTP ${res.status}`);
+        return;
+      }
+      const json: IdentityInfo = await res.json();
+      setIdentity(json);
+    } catch {
+      setIdentityError('無法連線至伺服器，請確認設定是否正確。');
+    } finally {
+      setIdentityLoading(false);
+    }
+  }, [baseUrl]);
+
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+    >
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>個人資訊</Text>
+
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={fetchIdentity}
+          disabled={identityLoading}
+        >
+          {identityLoading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.primaryButtonText}>取得身份資訊</Text>
+          )}
+        </TouchableOpacity>
+
+        {identityError && (
+          <Text style={styles.errorText}>{identityError}</Text>
+        )}
+
+        {identity && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Identity</Text>
+            <InfoRow label="Hash" value={identity.identity.hash} />
+            <InfoRow label="Path" value={identity.identity.path} />
+            <InfoRow
+              label="已載入"
+              value={identity.identity.loaded ? '✓ 是' : '✗ 否'}
+            />
+
+            <View style={styles.divider} />
+
+            <Text style={styles.cardTitle}>Destination (IN)</Text>
+            <InfoRow label="Hash" value={identity.destination_in.hash} />
+            <InfoRow label="Path" value={identity.destination_in.path} />
+            <InfoRow
+              label="已載入"
+              value={identity.destination_in.loaded ? '✓ 是' : '✗ 否'}
+            />
+          </View>
+        )}
+      </View>
+    </ScrollView>
+  );
+}
+
+// ── 樣式 ──────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f2f2f7',
   },
-  toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#ccc',
+  content: {
+    padding: 16,
+    paddingBottom: 40,
   },
-  input: {
-    flex: 1,
-    height: 38,
-    backgroundColor: '#f2f2f7',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    fontSize: 14,
-    color: '#000',
+  section: {
+    marginBottom: 28,
   },
-  goButton: {
-    marginLeft: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1c1c1e',
+    marginBottom: 12,
+  },
+  primaryButton: {
     backgroundColor: '#007AFF',
-    borderRadius: 8,
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  goButtonText: {
+  primaryButtonText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
   },
-  loader: {
-    position: 'absolute',
-    top: 56,
-    left: 0,
-    right: 0,
-    zIndex: 10,
+  errorText: {
+    color: '#FF3B30',
+    fontSize: 13,
+    marginTop: 4,
+    marginBottom: 8,
   },
-  webview: {
-    flex: 1,
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 4,
   },
-  navBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#ccc',
-    paddingVertical: 10,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 10,
+  cardTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#8e8e93',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    marginTop: 4,
   },
-  navButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 6,
+  infoRow: {
+    marginBottom: 8,
   },
-  navButtonDisabled: {
-    opacity: 0.3,
+  infoLabel: {
+    fontSize: 12,
+    color: '#8e8e93',
+    marginBottom: 2,
   },
-  navIcon: {
-    fontSize: 22,
-    color: '#007AFF',
+  infoValue: {
+    fontSize: 13,
+    color: '#1c1c1e',
+    fontFamily: 'Courier',
   },
-  navIconDisabled: {
-    color: '#999',
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#ccc',
+    marginVertical: 10,
   },
 });
