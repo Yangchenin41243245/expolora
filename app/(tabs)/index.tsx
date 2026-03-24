@@ -1,110 +1,312 @@
-import React, { useCallback, useState } from 'react';
-import { Bubble, GiftedChat, IMessage, InputToolbar } from 'react-native-gifted-chat';
+// filepath: app/(tabs)/index.tsx
+import { Ionicons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {
+  Bubble,
+  GiftedChat,
+  IMessage,
+  InputToolbar,
+  Send,
+} from 'react-native-gifted-chat';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useMessaging } from '../context/MessagingContext';
 
-export default function Screen1() {
-  const [messages, setMessages] = useState<IMessage[]>([
-    {
-      _id: '1',
-      text: '你好！歡迎使用聊天室 👋',
-      createdAt: new Date(),
-      user: {
-        _id: 2,
-        name: '好友',
-        avatar: 'https://placeimg.com/140/140/any',
-      },
+// ── 常數 ──────────────────────────────────────────────
+const POLL_INTERVAL_MS = 4000;
+const MY_USER_ID  = 1;
+const BOT_USER_ID = 2;
+
+// ── 系統訊息前綴清單，符合任一就忽略 ─────────────────
+const SYSTEM_PREFIXES = [
+  '[SYSTEM]',
+  '[OUT]',
+  '[SEND COMPLETE]',
+  '[PACKET]',
+  '[PACKET RECV]',
+  '[IN]',
+  '[ERROR]',
+  '[WARN]',
+  '[INFO]',
+];
+
+/**
+ * /messages 回傳 string[]
+ * 判斷是否為系統/日誌訊息，是則回傳 true → 跳過不顯示
+ */
+const isSystemLine = (raw: string): boolean => {
+  const t = raw.trim();
+  if (t === '') return true;
+  return SYSTEM_PREFIXES.some(p => t.startsWith(p));
+};
+
+/**
+ * 純文字字串 → GiftedChat IMessage（接收方氣泡，左側）
+ */
+const lineToIMessage = (text: string, uid: string): IMessage => ({
+  _id: uid,
+  text: text.trim(),
+  createdAt: new Date(),
+  user: { _id: BOT_USER_ID, name: 'Peer' },
+});
+
+// ── 主元件 ────────────────────────────────────────────
+export default function ChatScreen() {
+  const { baseUrl, firstPeer } = useMessaging();
+
+  const [messages, setMessages] = useState<IMessage[]>([]);
+
+  // 每次輪詢比對陣列長度差，只插入新增的尾端部分
+  const knownCountRef = useRef(0);
+  const seenMsgIds    = useRef<Set<string>>(new Set());
+
+  // host/port 變更時重置
+  const prevBaseUrl = useRef(baseUrl);
+  useEffect(() => {
+    if (prevBaseUrl.current !== baseUrl) {
+      prevBaseUrl.current = baseUrl;
+      setMessages([]);
+      knownCountRef.current = 0;
+      seenMsgIds.current.clear();
+    }
+  }, [baseUrl]);
+
+  // ── 輪詢 /messages ────────────────────────────────────
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch(`${baseUrl}/messages`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) return;
+
+        const json: unknown = await res.json();
+        if (!Array.isArray(json)) return;
+
+        // 統一轉成字串陣列
+        const lines: string[] = json.map((item) =>
+          typeof item === 'string' ? item : JSON.stringify(item)
+        );
+
+        // 只處理新增的尾端
+        const prev = knownCountRef.current;
+        if (lines.length <= prev) return;
+
+        const newLines = lines.slice(prev);
+        knownCountRef.current = lines.length;
+
+        // 過濾系統/日誌行，只保留真正的對方訊息
+        const incoming: IMessage[] = newLines
+          .filter(line => !isSystemLine(line))
+          .map((line, i) => {
+            const uid = `recv_${prev + i}_${line.slice(0, 20)}`;
+            return lineToIMessage(line, uid);
+          });
+
+        if (incoming.length > 0) {
+          setMessages(prev => GiftedChat.append(prev, incoming));
+        }
+      } catch { /* 靜默 */ }
+    };
+
+    poll();
+    const t = setInterval(poll, POLL_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [baseUrl]);
+
+  // ── 發送訊息 ──────────────────────────────────────────
+  const onSend = useCallback(
+    async (newMessages: IMessage[] = []) => {
+      if (!firstPeer) return;
+
+      // 樂觀更新 UI（右側氣泡）
+      setMessages(prev => GiftedChat.append(prev, newMessages));
+
+      for (const msg of newMessages) {
+        seenMsgIds.current.add(String(msg._id));
+        try {
+          await fetch(`${baseUrl}/msgDirect`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            body: JSON.stringify({
+              dest_hash: firstPeer.dest_hash,
+              message: msg.text,
+            }),
+          });
+        } catch { /* 靜默 */ }
+      }
     },
-  ]);
-
-  const onSend = useCallback((newMessages: IMessage[] = []) => {
-    setMessages((previousMessages) =>
-      GiftedChat.append(previousMessages, newMessages)
-    );
-
-    // 模擬自動回覆
-    setTimeout(() => {
-      const replyMessage: IMessage = {
-        _id: Date.now().toString(),
-        text: '這是自動回覆！',
-        createdAt: new Date(),
-        user: { _id: 2, name: '好友' },
-      };
-      setMessages((previousMessages) =>
-        GiftedChat.append(previousMessages, [replyMessage])
-      );
-    }, 1000);
-  }, []);
-
-  // === 美化氣泡（顏色、圓角、陰影、比例）===
-  const renderBubble = (props: any) => (
-    <Bubble
-      {...props}
-      wrapperStyle={{
-        right: {
-          backgroundColor: '#06C755',   // 您的經典綠色
-          borderRadius: 20,
-          padding: 12,
-          marginVertical: 4,
-        },
-        left: {
-          backgroundColor: '#FFFFFF',
-          borderRadius: 20,
-          padding: 12,
-          marginVertical: 4,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 1 },
-          shadowOpacity: 0.08,
-          shadowRadius: 3,
-          elevation: 2,
-        },
-      }}
-      textStyle={{
-        right: { color: '#000', fontSize: 16 },
-        left: { color: '#000', fontSize: 16 },
-      }}
-      timeTextStyle={{
-        right: { color: '#FFFFFF', fontSize: 10 }, // 綠底用白色更清晰
-        left: { color: '#666', fontSize: 10 },
-      }}
-    />
+    [baseUrl, firstPeer]
   );
 
-  // === 美化輸入工具列（底部欄位）===
+  // ── 渲染元件 ──────────────────────────────────────────
+  const renderBubble = (props: any) => {
+    const isMe = props.currentMessage?.user?._id === MY_USER_ID;
+    return (
+      <View>
+        <Bubble
+          {...props}
+          wrapperStyle={{
+            right: {
+              backgroundColor: '#00C853',
+              borderTopRightRadius: 20,
+              borderTopLeftRadius: 20,
+              borderBottomRightRadius: 4,
+              borderBottomLeftRadius: 20,
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              marginVertical: 2,
+            },
+            left: {
+              backgroundColor: '#FFFFFF',
+              borderTopRightRadius: 20,
+              borderTopLeftRadius: 20,
+              borderBottomRightRadius: 20,
+              borderBottomLeftRadius: 4,
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              marginVertical: 2,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.12,
+              shadowRadius: 4,
+              elevation: 2,
+            },
+          }}
+          textStyle={{
+            right: { color: '#000', fontSize: 16, lineHeight: 22 },
+            left:  { color: '#000', fontSize: 16, lineHeight: 22 },
+          }}
+          timeTextStyle={{
+            right: { color: 'rgba(0,0,0,0.55)', fontSize: 11 },
+            left:  { color: '#888', fontSize: 11 },
+          }}
+        />
+        {isMe && (
+          <View style={styles.tickContainer}>
+            <Text style={styles.tick}>✓✓</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   const renderInputToolbar = (props: any) => (
     <InputToolbar
       {...props}
-      containerStyle={{
-        backgroundColor: '#F0F0F0',
-        borderTopWidth: 1,
-        borderTopColor: '#E0E0E0',
-        paddingVertical: 6,
-        paddingHorizontal: 8,
-      }}
+      containerStyle={styles.inputToolbar}
+      primaryStyle={styles.primaryStyle}
     />
   );
 
+  const renderSend = (props: any) => {
+    const hasText = props.text?.trim().length > 0;
+    return (
+      <Send
+        {...props}
+        disabled={!hasText || !firstPeer}
+        containerStyle={styles.sendContainer}
+      >
+        <Ionicons
+          name="send"
+          size={24}
+          color={hasText && firstPeer ? '#00C853' : '#AAAAAA'}
+        />
+      </Send>
+    );
+  };
+
+  const peerLabel = firstPeer
+    ? (firstPeer.announced_name ?? `${firstPeer.dest_hash.slice(0, 12)}…`)
+    : '等待節點…';
+
   return (
-    <GiftedChat
-      messages={messages}
-      onSend={onSend}
-      user={{ _id: 1 }}
-      // === 背景與整體比例美化 ===
-      messagesContainerStyle={{
-        backgroundColor: '#E5DDD5',   // WhatsApp 經典背景
-        paddingHorizontal: 10,
-      }}
-      // === 輸入框 placeholder ===
-      textInputProps={{
-        placeholder: '輸入訊息...',
-        placeholderTextColor: '#999',
-      }}
-      // === 其他美化設定 ===
-      renderBubble={renderBubble}
-      renderInputToolbar={renderInputToolbar}
-      isSendButtonAlwaysVisible={true}     // 永遠顯示漂亮送出箭頭
-      timeFormat="HH:mm"
-      dateFormat="YYYY/MM/DD"
-      // 如果您用 Expo Router，可取消註解下面這行解決鍵盤問題：
-      // keyboardAvoidingViewProps={{ keyboardVerticalOffset: useHeaderHeight() }}
-    />
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F6F6F6" />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={{ width: 40 }} />
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerName}>{peerLabel}</Text>
+          {!firstPeer && (
+            <Text style={styles.headerSub}>Lobby 無節點</Text>
+          )}
+        </View>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <GiftedChat
+        messages={messages}
+        onSend={onSend}
+        user={{ _id: MY_USER_ID }}
+        renderBubble={renderBubble}
+        renderInputToolbar={renderInputToolbar}
+        renderSend={renderSend}
+        messagesContainerStyle={{ backgroundColor: '#E5DDD5' }}
+        textInputProps={{
+          placeholder: firstPeer ? '輸入訊息' : 'Lobby 無節點，無法傳送',
+          placeholderTextColor: '#999',
+          style: { fontSize: 16 },
+          editable: !!firstPeer,
+        }}
+        isSendButtonAlwaysVisible
+        isScrollToBottomEnabled
+        scrollToBottomOffset={150}
+        timeFormat="HH:mm"
+        dateFormat="YYYY年M月D日"
+      />
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F6F6F6' },
+  header: {
+    height: 54,
+    backgroundColor: '#F6F6F6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E0E0E0',
+  },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerName: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#000',
+    textAlign: 'center',
+  },
+  headerSub: { fontSize: 11, color: '#e05a00', marginTop: 1 },
+  inputToolbar: {
+    backgroundColor: '#F6F6F6',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#D8D8D8',
+    paddingVertical: 6,
+  },
+  primaryStyle: {
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 0.5,
+    borderColor: '#E0E0E0',
+    paddingHorizontal: 12,
+    marginHorizontal: 8,
+  },
+  sendContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    marginBottom: 8,
+  },
+  tickContainer: { alignItems: 'flex-end', marginRight: 8, marginTop: -4 },
+  tick: { fontSize: 12, color: 'rgba(0,0,0,0.4)' },
+});
