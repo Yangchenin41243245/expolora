@@ -1,11 +1,12 @@
 // filepath: app/(tabs)/MessagingContext.tsx
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, {
-    createContext,
-    useCallback,
-    useContext,
-    useEffect,
-    useRef,
-    useState,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
 } from 'react';
 
 // ── 預設值 ────────────────────────────────────────────
@@ -50,6 +51,20 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
   const [host, setHostState] = useState(DEFAULT_HOST);
   const [port, setPortState] = useState(DEFAULT_PORT);
   const [lobbyPeers, setLobbyPeers] = useState<LobbyPeer[]>([]);
+
+  // 從 AsyncStorage 讀取已儲存的 host / port
+  useEffect(() => {
+    (async () => {
+      try {
+        const [savedHost, savedPort] = await Promise.all([
+          AsyncStorage.getItem('saved_host'),
+          AsyncStorage.getItem('saved_port'),
+        ]);
+        if (savedHost) setHostState(savedHost);
+        if (savedPort) setPortState(Number(savedPort));
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
   // ref 供 interval callback 讀最新值，不需重建 interval
   const hostRef = useRef(host);
