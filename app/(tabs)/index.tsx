@@ -4,7 +4,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   FlatList,
+  KeyboardAvoidingView, // ← 新增
   Modal,
+  Platform, // ← 新增
   StatusBar,
   StyleSheet,
   Text,
@@ -309,17 +311,22 @@ export default function ChatScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F6F6F6" />
+  <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <StatusBar barStyle="dark-content" backgroundColor="#F6F6F6" />
 
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <View style={{ width: 40 }} />
-        <HeaderCenter />
-        <View style={{ width: 40 }} />
-      </View>
+    {/* ── Header ── */}
+    <View style={styles.header}>
+      <View style={{ width: 40 }} />
+      <HeaderCenter />
+      <View style={{ width: 40 }} />
+    </View>
 
-      {/* ── 對話區 ── */}
+    {/* ── 對話區 ── */}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'android' ? 'padding' : 'height'}
+      keyboardVerticalOffset={100}
+    >
       <GiftedChat
         messages={messages}
         onSend={onSend}
@@ -334,26 +341,30 @@ export default function ChatScreen() {
           style: { fontSize: 16 },
           editable: !!selectedPeer,
         }}
+        listProps={{
+          keyboardShouldPersistTaps: 'handled',
+        }}
         isSendButtonAlwaysVisible
-        isScrollToBottomEnabled
+         isScrollToBottomEnabled
         scrollToBottomOffset={150}
         timeFormat="HH:mm"
         dateFormat="YYYY年M月D日"
       />
+    </KeyboardAvoidingView>
 
-      {/* ── 節點選擇器 Modal ── */}
-      <PeerPickerModal
-        visible={showPeerPicker}
-        peers={lobbyPeers as LobbyPeer[]}
-        selectedHash={selectedPeer?.dest_hash ?? null}
-        onSelect={(peer) => {
-          setSelectedPeer(peer);
-          setShowPeerPicker(false);
-        }}
-        onClose={() => setShowPeerPicker(false)}
-      />
-    </SafeAreaView>
-  );
+    {/* ── 節點選擇器 Modal ── */}
+    <PeerPickerModal
+      visible={showPeerPicker}
+      peers={lobbyPeers as LobbyPeer[]}
+      selectedHash={selectedPeer?.dest_hash ?? null}
+      onSelect={(peer) => {
+        setSelectedPeer(peer);
+        setShowPeerPicker(false);
+      }}
+      onClose={() => setShowPeerPicker(false)}
+    />
+  </SafeAreaView>
+);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
