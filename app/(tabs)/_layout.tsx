@@ -22,12 +22,22 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="screen1"
+          options={{
+            title: '聯絡人',
+            tabBarLabel: 'CONTACTS',
+            tabBarIcon: ({ color }) => (
+              <Text style={{ fontSize: 24, color }}>🏠</Text>
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="screen2"
           options={{
             title: '個別資訊',
-            tabBarLabel: 'ROOM',
+            tabBarLabel: 'IDENTITY',
             tabBarIcon: ({ color }) => (
-              <Text style={{ fontSize: 24, color }}>🏠</Text>
+              <Text style={{ fontSize: 24, color }}>🧑‍🔧</Text>
             ),
           }}
         />
@@ -35,7 +45,7 @@ export default function TabLayout() {
           name="screen3"
           options={{
             title: '設定',
-            tabBarLabel: 'NEW',
+            tabBarLabel: 'JSON',
             tabBarIcon: ({ color }) => (
               <Text style={{ fontSize: 24, color }}>⚙️</Text>
             ),
