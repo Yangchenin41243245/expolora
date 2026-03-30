@@ -8,7 +8,6 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ── 預設值 ────────────────────────────────────────────
 export const DEFAULT_HOST = '10.165.0.78';
