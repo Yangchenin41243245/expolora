@@ -289,7 +289,7 @@ const JsonViewer: React.FC<{ data: unknown; depth: number }> = ({ data, depth })
   if (data === null) return <Text style={[styles.jNull, { marginLeft: indent }]}>null</Text>;
   if (typeof data === 'boolean') return <Text style={[styles.jBool, { marginLeft: indent }]}>{data ? 'true' : 'false'}</Text>;
   if (typeof data === 'number') return <Text style={[styles.jNum, { marginLeft: indent }]}>{data}</Text>;
-  if (typeof data === 'string') return <Text style={[styles.jStr, { marginLeft: indent }]}>{'"'}{data}{'"'}</Text>;
+  if (typeof data === 'string') return <Text style={[styles.jStr, { marginLeft: indent }]}>"{data}"</Text>;
   if (Array.isArray(data)) {
     if (data.length === 0) return <Text style={[styles.jBracket, { marginLeft: indent }]}>[]</Text>;
     return (
