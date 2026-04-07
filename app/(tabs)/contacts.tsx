@@ -1,19 +1,19 @@
-// filepath: app/(tabs)/screen1.tsx
+// filepath: app/(tabs)/contacts.tsx
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useMessaging } from '../context/MessagingContext';
 
@@ -59,7 +59,7 @@ const formatTime = (ts?: number) => {
 
 // ── 主元件 ────────────────────────────────────────────────────────────────────
 
-export default function Screen1() {
+export default function contacts() {
   const { host, port } = useMessaging();
   const baseUrl = `http://${host}:${port}`;
 

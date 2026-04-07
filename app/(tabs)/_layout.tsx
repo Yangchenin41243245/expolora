@@ -22,7 +22,7 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="screen1"
+          name="contacts"
           options={{
             title: '聯絡人',
             tabBarLabel: 'CONTACTS',
@@ -32,7 +32,7 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="screen2"
+          name="identity"
           options={{
             title: '個別資訊',
             tabBarLabel: 'IDENTITY',
@@ -42,7 +42,7 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="screen3"
+          name="j_settings"
           options={{
             title: '設定',
             tabBarLabel: 'JSON',
