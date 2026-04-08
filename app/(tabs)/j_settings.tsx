@@ -1,4 +1,4 @@
-// filepath: app/(tabs)/screen3.tsx
+// filepath: app/(tabs)/j_settings.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -36,7 +36,7 @@ type SendState = { loading: boolean; result: unknown; error: string | null };
 const initState = (): FetchState => ({ data: null, loading: false, error: null, lastUpdated: null });
 const initSendState = (): SendState => ({ loading: false, result: null, error: null });
 
-const Screen3: React.FC = () => {
+const j_settings: React.FC = () => {
   // ── 從 Context 讀取共享的 host/port ──────────────────
   const { host, port, setHost, setPort, firstPeer } = useMessaging();
 
@@ -416,4 +416,4 @@ const styles = StyleSheet.create({
   jPunct: { color: '#d4d4d4', fontFamily: 'monospace', fontSize: 13 },
 });
 
-export default Screen3;
+export default j_settings;

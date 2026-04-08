@@ -1,4 +1,4 @@
-// filepath: app/(tabs)/screen2.tsx
+// filepath: app/(tabs)/identity.tsx
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -111,7 +111,7 @@ const C = {
 // 主元件
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function Screen2() {
+export default function identity() {
   const { baseUrl, lobbyPeers } = useMessaging();
 
   const [mode, setMode]           = useState<QueryMode>('contact');
@@ -414,7 +414,7 @@ export default function Screen2() {
         </View>
       </Modal>
 
-      {/* ── Lobby 完整選取 Modal（與 screen3 對應的 overlay 模式）── */}
+      {/* ── Lobby 完整選取 Modal（與 j_settings 對應的 overlay 模式）── */}
       <Modal visible={showPicker} transparent animationType="slide" onRequestClose={() => setShowPicker(false)}>
         <View style={styles.pickerOverlay}>
           <View style={styles.pickerSheet}>

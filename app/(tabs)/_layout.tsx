@@ -32,6 +32,16 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="groups"
+          options={{
+            title: '群組',
+            tabBarLabel: 'GROUPS',
+            tabBarIcon: ({ color }) => (
+              <Text style={{ fontSize: 24, color }}>👥</Text>
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="identity"
           options={{
             title: '個別資訊',
