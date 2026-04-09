@@ -35,6 +35,27 @@ npm run reset-project
 
 This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
 
+## Mapbox & Location Sharing
+
+This project integrates Mapbox and location-sharing features, which require a **Custom Native Build**. Standard Expo Go cannot be used.
+
+### Build and Test (Android)
+
+To build and run the app for Android, you must provide your Mapbox download token:
+
+```bash
+# Set your Mapbox Secret Token (starts with sk.)
+export RNMAPBOX_MAPS_DOWNLOAD_TOKEN=your_token_here
+
+# Clean and rebuild the native project
+npx expo prebuild --clean
+
+# Run the app on an Android device or emulator
+npx expo run:android
+```
+
+> **Note:** The `RNMAPBOX_MAPS_DOWNLOAD_TOKEN` is required by the Mapbox SDK to download native dependencies during the build process.
+
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following resources:
