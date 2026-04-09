@@ -32,7 +32,7 @@ const BOT_USER_ID = 2;
 
 const SYSTEM_PREFIXES = [
   '[SYSTEM]', '[OUT]', '[SEND COMPLETE]', '[PACKET]',
-  '[PACKET RECV]', '[IN]', '[ERROR]', '[WARN]', '[INFO]', '[RECEIPT TIMEOUT]',
+  '[PACKET RECV]', '[IN]', '[ERROR]', '[WARN]', '[INFO]', '[RECEIPT TIMEOUT]', '[GROUP]', '[GROUP INVITE]', '[GROUP SYSTEM]',
 ];
 
 const isSystemLine = (raw: string): boolean => {
@@ -53,8 +53,10 @@ type ChatState = {
 type RawGroupMsg = {
   message_type: 'GROUP' | 'GROUP_INVITE' | 'GROUP_SYSTEM';
   content?: string;
-  sender?: string;
-  sender_name?: string;
+  from_hash?: string;
+  from_name?: string;
+  message_id?: string;
+  status?: string;       // 'delivered' = 自己發的, 'received' = 別人發的
   timestamp?: number;
 };
 
@@ -62,17 +64,27 @@ type RawGroupMsg = {
 
 const shortHash = (h: string) => (h ? `${h.slice(0, 8)}…` : '—');
 
-const rawGroupMsgToIMessage = (m: RawGroupMsg, idx: number): IMessage => {
-  const isSelf   = m.sender === 'self' || m.sender === 'me';
+const rawGroupMsgToIMessage = (
+  m: RawGroupMsg,
+  idx: number,
+  selfName?: string,
+): IMessage => {
   const isSystem = m.message_type === 'GROUP_SYSTEM' || m.message_type === 'GROUP_INVITE';
+  const isSelf =
+    m.status === 'delivered' ||
+    (!!selfName && !!m.from_name && m.from_name === selfName);
+
   return {
-    _id:       `grp_${idx}_${m.timestamp ?? idx}`,
+    _id:       m.message_id ?? `grp_${idx}_${m.timestamp ?? idx}`,
     text:      m.content ?? '',
     createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
     system:    isSystem,
     user: isSystem
       ? { _id: 0 }
-      : { _id: isSelf ? MY_USER_ID : BOT_USER_ID, name: m.sender_name ?? 'Member' },
+      : {
+          _id:  isSelf ? MY_USER_ID : BOT_USER_ID,
+          name: m.from_name ?? 'Member',
+        },
   };
 };
 
@@ -213,7 +225,8 @@ export default function ChatScreen() {
         if (!res.ok) return;
         const json = await res.json();
         const rawMsgs: RawGroupMsg[] = json?.data?.messages ?? [];
-        const converted = rawMsgs.map(rawGroupMsgToIMessage).reverse();
+        const selfName: string | undefined = json?.data?.group_room?.self_name;
+        const converted = rawMsgs.map((m, i) => rawGroupMsgToIMessage(m, i, selfName)).reverse();
         applyMessages(key, converted);
       } catch { /* 靜默 */ }
     };

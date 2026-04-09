@@ -44,11 +44,15 @@ export type GroupRoom = {
 
 // getGroupChat 完整回應裡的訊息型別
 export type GroupMessage = {
+  message_id: string;
   message_type: 'GROUP' | 'GROUP_INVITE' | 'GROUP_SYSTEM';
   content?: string;
-  sender?: string;
-  sender_name?: string;
+  from_hash?: string;
+  from_name?: string;
+  group_name?: string;
+  status?: string;
   timestamp?: number;
+  to_hash?: string;
 };
 
 type MessagingCtx = {

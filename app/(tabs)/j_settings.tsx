@@ -36,6 +36,17 @@ type SendState = { loading: boolean; result: unknown; error: string | null };
 const initState = (): FetchState => ({ data: null, loading: false, error: null, lastUpdated: null });
 const initSendState = (): SendState => ({ loading: false, result: null, error: null });
 
+type GroupDebugState = {
+  groupName: string;
+  data: unknown;
+  loading: boolean;
+  error: string | null;
+  lastUpdated: Date | null;
+};
+const initGroupDebug = (): GroupDebugState => ({
+  groupName: '', data: null, loading: false, error: null, lastUpdated: null,
+});
+
 const j_settings: React.FC = () => {
   // ── 從 Context 讀取共享的 host/port ──────────────────
   const { host, port, setHost, setPort, firstPeer } = useMessaging();
@@ -58,6 +69,28 @@ const j_settings: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [sendState, setSendState] = useState<SendState>(initSendState());
+  const [groupDebug, setGroupDebug] = useState<GroupDebugState>(initGroupDebug());
+  const [activeTopTab, setActiveTopTab] = useState<'endpoint' | 'group'>('endpoint');
+
+  const fetchGroupDebug = useCallback(async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setGroupDebug(prev => ({ ...prev, loading: true, error: null, data: null }));
+    try {
+      const res = await fetch(
+        `http://${hostRef.current}:${portRef.current}/getGroupChat/${encodeURIComponent(trimmed)}`,
+        { headers: { Accept: 'application/json' } }
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${json?.error_message ?? ''}`);
+      setGroupDebug(prev => ({
+        ...prev, loading: false, error: null, data: json, lastUpdated: new Date(),
+      }));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setGroupDebug(prev => ({ ...prev, loading: false, error: msg, data: null }));
+    }
+  }, []);
 
   const fetchEndpoint = useCallback(async (endpoint: Endpoint) => {
     setStates(prev => ({ ...prev, [endpoint]: { ...prev[endpoint], loading: true, error: null } }));
@@ -179,6 +212,26 @@ const j_settings: React.FC = () => {
         </View>
       )}
 
+      {/* ── 頂部模式切換 ── */}
+      <View style={styles.topTabRow}>
+        <TouchableOpacity
+          style={[styles.topTab, activeTopTab === 'endpoint' && styles.topTabActive]}
+          onPress={() => setActiveTopTab('endpoint')}
+        >
+          <Text style={[styles.topTabText, activeTopTab === 'endpoint' && styles.topTabTextActive]}>
+            端點診斷
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.topTab, activeTopTab === 'group' && styles.topTabActive]}
+          onPress={() => setActiveTopTab('group')}
+        >
+          <Text style={[styles.topTabText, activeTopTab === 'group' && styles.topTabTextActive]}>
+            群組 Debug
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* ── Host 設定列 ── */}
       <View style={styles.hostRow}>
         <TextInput
@@ -218,67 +271,79 @@ const j_settings: React.FC = () => {
         </Text>
       </View>
 
-      {/* ── 群組 Tab ── */}
-      <View style={styles.groupRow}>
-        {(Object.keys(ENDPOINT_GROUPS) as Group[]).map(group => (
-          <TouchableOpacity
-            key={group}
-            style={[styles.groupTab, activeGroup === group && styles.groupTabActive]}
-            onPress={() => handleGroupChange(group)}
-          >
-            <Text style={[styles.groupTabText, activeGroup === group && styles.groupTabTextActive]}>
-              {group}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* ── 端點 Tab ── */}
-      <View style={styles.tabRow}>
-        {ENDPOINT_GROUPS[activeGroup].map(ep => (
-          <TouchableOpacity
-            key={ep}
-            style={[styles.tab, activeEndpoint === ep && styles.tabActive]}
-            onPress={() => setActiveEndpoint(ep as Endpoint)}
-          >
-            <Text style={[styles.tabText, activeEndpoint === ep && styles.tabTextActive]}>{ep}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* ── 狀態列 ── */}
-      <View style={styles.statusBar}>
-        <Text style={styles.statusText}>
-          {current.lastUpdated ? `最後更新：${current.lastUpdated.toLocaleTimeString()}` : '尚未載入'}
-        </Text>
-        {current.loading && <ActivityIndicator size="small" color="#4a90e2" />}
-        <TouchableOpacity onPress={() => fetchEndpoint(activeEndpoint)}>
-          <Text style={styles.refreshBtn}>↻ 刷新</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── 內容區 ── */}
-      <ScrollView
-        style={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={current.loading} onRefresh={() => fetchEndpoint(activeEndpoint)} />
-        }
-      >
-        {current.error ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorTitle}>⚠ 連線失敗</Text>
-            <Text style={styles.errorMsg}>{current.error}</Text>
-            <Text style={styles.errorHint}>
-              請確認：{'\n'}• 電腦連至手機熱點{'\n'}• 電腦 IP 為 {host}{'\n'}
-              • Flask 執行於 port {port}
-            </Text>
+      {activeTopTab === 'endpoint' && (
+        <>
+          {/* ── 群組 Tab ── */}
+          <View style={styles.groupRow}>
+            {(Object.keys(ENDPOINT_GROUPS) as Group[]).map(group => (
+              <TouchableOpacity
+                key={group}
+                style={[styles.groupTab, activeGroup === group && styles.groupTabActive]}
+                onPress={() => handleGroupChange(group)}
+              >
+                <Text style={[styles.groupTabText, activeGroup === group && styles.groupTabTextActive]}>
+                  {group}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
-        ) : current.data == null ? (
-          <Text style={styles.emptyText}>載入中…</Text>
-        ) : (
-          <JsonViewer data={current.data} depth={0} />
-        )}
-      </ScrollView>
+
+          {/* ── 端點 Tab ── */}
+          <View style={styles.tabRow}>
+            {ENDPOINT_GROUPS[activeGroup].map(ep => (
+              <TouchableOpacity
+                key={ep}
+                style={[styles.tab, activeEndpoint === ep && styles.tabActive]}
+                onPress={() => setActiveEndpoint(ep as Endpoint)}
+              >
+                <Text style={[styles.tabText, activeEndpoint === ep && styles.tabTextActive]}>{ep}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* ── 狀態列 ── */}
+          <View style={styles.statusBar}>
+            <Text style={styles.statusText}>
+              {current.lastUpdated ? `最後更新：${current.lastUpdated.toLocaleTimeString()}` : '尚未載入'}
+            </Text>
+            {current.loading && <ActivityIndicator size="small" color="#4a90e2" />}
+            <TouchableOpacity onPress={() => fetchEndpoint(activeEndpoint)}>
+              <Text style={styles.refreshBtn}>↻ 刷新</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── 內容區 ── */}
+          <ScrollView
+            style={styles.content}
+            refreshControl={
+              <RefreshControl refreshing={current.loading} onRefresh={() => fetchEndpoint(activeEndpoint)} />
+            }
+          >
+            {current.error ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorTitle}>⚠ 連線失敗</Text>
+                <Text style={styles.errorMsg}>{current.error}</Text>
+                <Text style={styles.errorHint}>
+                  請確認：{'\n'}• 電腦連至手機熱點{'\n'}• 電腦 IP 為 {host}{'\n'}
+                  • Flask 執行於 port {port}
+                </Text>
+              </View>
+            ) : current.data == null ? (
+              <Text style={styles.emptyText}>載入中…</Text>
+            ) : (
+              <JsonViewer data={current.data} depth={0} />
+            )}
+          </ScrollView>
+        </>
+      )}
+
+      {activeTopTab === 'group' && (
+        <GroupDebugPanel
+          state={groupDebug}
+          onNameChange={name => setGroupDebug(prev => ({ ...prev, groupName: name }))}
+          onFetch={() => fetchGroupDebug(groupDebug.groupName)}
+        />
+      )}
     </View>
   );
 };
@@ -323,6 +388,127 @@ const JsonViewer: React.FC<{ data: unknown; depth: number }> = ({ data, depth })
     );
   }
   return <Text style={{ marginLeft: indent }}>{String(data)}</Text>;
+};
+
+// ── 群組 Debug 面板 ────────────────────────────────────
+
+type GroupDebugPanelProps = {
+  state: GroupDebugState;
+  onNameChange: (name: string) => void;
+  onFetch: () => void;
+};
+
+const GroupDebugPanel: React.FC<GroupDebugPanelProps> = ({ state, onNameChange, onFetch }) => (
+  <View style={{ flex: 1 }}>
+    {/* 輸入列 */}
+    <View style={styles.groupDbInputRow}>
+      <TextInput
+        style={styles.groupDbInput}
+        value={state.groupName}
+        onChangeText={onNameChange}
+        placeholder="輸入 group_name"
+        placeholderTextColor="#444"
+        autoCapitalize="none"
+        autoCorrect={false}
+        onSubmitEditing={onFetch}
+        returnKeyType="search"
+      />
+      <TouchableOpacity
+        style={[styles.groupDbFetchBtn, state.loading && { opacity: 0.5 }]}
+        onPress={onFetch}
+        disabled={state.loading}
+      >
+        {state.loading
+          ? <ActivityIndicator size="small" color="#fff" />
+          : <Text style={styles.groupDbFetchText}>查詢</Text>
+        }
+      </TouchableOpacity>
+    </View>
+
+    {/* URL 預覽 */}
+    {state.groupName.trim() !== '' && (
+      <Text style={styles.groupDbUrlHint}>
+        → GET /getGroupChat/{state.groupName.trim()}
+      </Text>
+    )}
+
+    {/* 狀態列 */}
+    <View style={styles.statusBar}>
+      <Text style={styles.statusText}>
+        {state.lastUpdated
+          ? `最後更新：${state.lastUpdated.toLocaleTimeString()}`
+          : '尚未查詢'}
+      </Text>
+      {state.loading && <ActivityIndicator size="small" color="#4a90e2" />}
+    </View>
+
+    {/* 結果區 */}
+    <ScrollView style={styles.content}>
+      {state.error ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorTitle}>⚠ 查詢失敗</Text>
+          <Text style={styles.errorMsg}>{state.error}</Text>
+        </View>
+      ) : state.data == null ? (
+        <Text style={styles.emptyText}>輸入群組名稱後按查詢</Text>
+      ) : (
+        <>
+          <GroupDebugSummary data={state.data} />
+          <Text style={styles.groupDbSectionTitle}>完整 JSON</Text>
+          <JsonViewer data={state.data} depth={0} />
+        </>
+      )}
+    </ScrollView>
+  </View>
+);
+
+const GroupDebugSummary: React.FC<{ data: unknown }> = ({ data }) => {
+  if (typeof data !== 'object' || data === null) return null;
+  const d = data as Record<string, unknown>;
+  const dataObj = d?.data && typeof d.data === 'object'
+    ? (d.data as Record<string, unknown>)
+    : null;
+  const room = dataObj?.group_room as Record<string, unknown> | null ?? null;
+  const msgs = Array.isArray(dataObj?.messages)
+    ? (dataObj!.messages as Record<string, unknown>[])
+    : [];
+  const count = dataObj?.count;
+
+  return (
+    <View style={styles.groupDbSummaryBox}>
+      <Text style={styles.groupDbSectionTitle}>快速摘要</Text>
+      <View style={styles.groupDbRow}>
+        <Text style={styles.groupDbLabel}>group_name</Text>
+        <Text style={styles.groupDbValue}>{String(room?.group_name ?? '—')}</Text>
+      </View>
+      <View style={styles.groupDbRow}>
+        <Text style={styles.groupDbLabel}>self_name</Text>
+        <Text style={styles.groupDbValue}>{String(room?.self_name ?? '—')}</Text>
+      </View>
+      <View style={styles.groupDbRow}>
+        <Text style={styles.groupDbLabel}>join_confirm</Text>
+        <Text style={[styles.groupDbValue, { color: room?.join_confirm ? '#27ae60' : '#e2a84a' }]}>
+          {String(room?.join_confirm ?? '—')}
+        </Text>
+      </View>
+      <View style={styles.groupDbRow}>
+        <Text style={styles.groupDbLabel}>訊息數</Text>
+        <Text style={styles.groupDbValue}>{String(count ?? msgs.length)}</Text>
+      </View>
+      {msgs.length > 0 && (
+        <>
+          <Text style={[styles.groupDbLabel, { marginTop: 10, marginBottom: 4 }]}>最新 3 筆訊息</Text>
+          {msgs.slice(-3).map((m, i) => (
+            <View key={i} style={styles.groupDbMsgRow}>
+              <Text style={styles.groupDbMsgType}>{String(m.message_type ?? '?')}</Text>
+              <Text style={styles.groupDbMsgSender}>{String(m.sender_name ?? m.sender ?? '?')}</Text>
+              <Text style={styles.groupDbMsgContent} numberOfLines={1}>{String(m.content ?? '')}</Text>
+            </View>
+          ))}
+        </>
+      )}
+    </View>
+  );
 };
 
 // ── 樣式 ───────────────────────────────────────────────
@@ -414,6 +600,64 @@ const styles = StyleSheet.create({
   jNull: { color: '#569cd6', fontFamily: 'monospace', fontSize: 13 },
   jRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
   jPunct: { color: '#d4d4d4', fontFamily: 'monospace', fontSize: 13 },
+
+  // ── 頂部 Tab ──
+  topTabRow: {
+    flexDirection: 'row', backgroundColor: '#0d0f18',
+    borderBottomWidth: 1, borderBottomColor: '#1e2130',
+  },
+  topTab: { flex: 1, paddingVertical: 10, alignItems: 'center' },
+  topTabActive: { borderBottomWidth: 2, borderBottomColor: '#4a90e2', backgroundColor: '#12141e' },
+  topTabText: { color: '#555', fontSize: 13, fontFamily: 'monospace' },
+  topTabTextActive: { color: '#4a90e2', fontWeight: '700' },
+
+  // ── 群組 Debug ──
+  groupDbInputRow: {
+    flexDirection: 'row', alignItems: 'center',
+    padding: 10, backgroundColor: '#1a1d27',
+    borderBottomWidth: 1, borderBottomColor: '#1e2130', gap: 8,
+  },
+  groupDbInput: {
+    flex: 1, backgroundColor: '#252836', color: '#e0e0e0',
+    borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7,
+    fontSize: 13, fontFamily: 'monospace',
+  },
+  groupDbFetchBtn: {
+    backgroundColor: '#4a90e2', borderRadius: 6,
+    paddingHorizontal: 16, paddingVertical: 9, minWidth: 60, alignItems: 'center',
+  },
+  groupDbFetchText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  groupDbUrlHint: {
+    color: '#3a5a8a', fontSize: 11, fontFamily: 'monospace',
+    paddingHorizontal: 12, paddingVertical: 5, backgroundColor: '#0d0f18',
+  },
+  groupDbSummaryBox: {
+    backgroundColor: '#12141e', borderRadius: 8, padding: 12,
+    borderWidth: 1, borderColor: '#1e2130', marginBottom: 16,
+  },
+  groupDbSectionTitle: {
+    color: '#4a90e2', fontSize: 11, fontFamily: 'monospace',
+    letterSpacing: 0.8, marginBottom: 8, textTransform: 'uppercase',
+  },
+  groupDbRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: '#1e2130',
+  },
+  groupDbLabel: { color: '#556', fontSize: 12, fontFamily: 'monospace' },
+  groupDbValue: { color: '#9cdcfe', fontSize: 12, fontFamily: 'monospace' },
+  groupDbMsgRow: {
+    flexDirection: 'row', gap: 8, paddingVertical: 4,
+    borderBottomWidth: 1, borderBottomColor: '#1e2130', alignItems: 'center',
+  },
+  groupDbMsgType: {
+    color: '#ce9178', fontSize: 10, fontFamily: 'monospace',
+    width: 90, flexShrink: 0,
+  },
+  groupDbMsgSender: {
+    color: '#4ec9b0', fontSize: 11, fontFamily: 'monospace',
+    width: 70, flexShrink: 0,
+  },
+  groupDbMsgContent: { color: '#d4d4d4', fontSize: 12, flex: 1 },
 });
 
 export default j_settings;
