@@ -1,24 +1,24 @@
 // filepath: app/(tabs)/groups.tsx
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import {
-    GroupMember,
-    GroupRoom,
-    useMessaging,
+  GroupMember,
+  GroupRoom,
+  useMessaging,
 } from '../context/MessagingContext';
 
 // ── 顏色常數（與整體 App 一致）─────────────────────────────────────────────
@@ -99,6 +99,7 @@ export default function GroupsScreen() {
   }, [refreshGroups]);
 
   useEffect(() => { handleRefresh(); }, []);
+
 
   // ── API helpers ───────────────────────────────────────────────────────────
 
@@ -367,21 +368,8 @@ export default function GroupsScreen() {
           }}
           onAddMembers={() => setScene({ type: 'add_members', room: scene.room })}
           onUnregister={async () => {
-            Alert.alert(
-              '從清單移除',
-              `確定要從本地清單移除「${scene.room.group_name}」嗎？\n（不會通知其他成員）`,
-              [
-                { text: '取消', style: 'cancel' },
-                {
-                  text: '移除',
-                  style: 'destructive',
-                  onPress: async () => {
-                    await unregisterGroup(scene.room.group_name);
-                    setScene({ type: 'none' });
-                  },
-                },
-              ]
-            );
+            await unregisterGroup(scene.room.group_name);
+            setScene({ type: 'none' });
           }}
         />
       )}
@@ -679,7 +667,7 @@ type GroupDetailModalProps = {
   onJoin: (self_name: string) => Promise<void>;
   onRename: (self_name: string) => Promise<void>;
   onAddMembers: () => void;
-  onUnregister: () => void;
+  onUnregister: () => Promise<void>;
 };
 
 const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
