@@ -2,6 +2,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -21,7 +23,11 @@ import {
   SystemMessage,
 } from 'react-native-gifted-chat';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import LocationMessageBubble from '../../components/LocationMessageBubble';
 import { useMessaging } from '../context/MessagingContext';
+import type { LocationMessage } from '../../types/chat';
+import { getCurrentLocation } from '../../utils/location';
 
 // ── 常數 ──────────────────────────────────────────────────────────────────────
 
@@ -46,7 +52,7 @@ const isSystemLine = (raw: string): boolean => {
 type ChatMode = 'peer' | 'group' | null;
 
 type ChatState = {
-  messages: IMessage[];
+  messages: LocationMessage[];
   knownCount: number;
 };
 
@@ -115,7 +121,8 @@ export default function ChatScreen() {
 
   // ── 訊息快取 ──────────────────────────────────────────────────────────────
   const chatStatesRef = useRef<Record<string, ChatState>>({});
-  const [messages, setMessages] = useState<IMessage[]>([]);
+  const [messages, setMessages] = useState<LocationMessage[]>([]);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   // ── 加入確認 Modal ────────────────────────────────────────────────────────
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -168,7 +175,7 @@ export default function ChatScreen() {
   }, [baseUrl]);
 
   // ── 快取更新：透過 ref 讀取當前狀態，避免 setState 觸發 effect ───────────
-  const applyMessages = useCallback((key: string, msgs: IMessage[], knownCount?: number) => {
+  const applyMessages = useCallback((key: string, msgs: LocationMessage[], knownCount?: number) => {
     const prev = chatStatesRef.current[key] ?? { messages: [], knownCount: 0 };
     chatStatesRef.current[key] = { messages: msgs, knownCount: knownCount ?? prev.knownCount };
     const mode  = chatModeRef.current;
@@ -272,6 +279,70 @@ export default function ChatScreen() {
     }
   }, [baseUrl, applyMessages, lobbyPeersRaw, groupRoomsRaw]);
 
+  // ── 分享位置 ──────────────────────────────────────────────────────────────
+  const sendLocation = useCallback(async () => {
+    const mode  = chatModeRef.current;
+    const hash  = selectedPeerRef.current;
+    const gname = selectedGroupRef.current;
+    if (!mode) return;
+
+    if (mode === 'group') {
+      const room = groupRoomsRaw?.find(r => r.group_name === gname);
+      if (!room?.join_confirm) { setShowJoinModal(true); return; }
+    }
+
+    setLocationLoading(true);
+    try {
+      const { latitude, longitude } = await getCurrentLocation();
+
+      const locationMsg: LocationMessage = {
+        _id: `loc_${Date.now()}`,
+        text: `📍 Location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+        createdAt: new Date(),
+        user: { _id: MY_USER_ID },
+        location: { latitude, longitude },
+        offlineStatus: 'queued',
+      };
+
+      // Append to local chat state
+      const key   = mode === 'peer' ? `peer:${hash}` : `group:${gname}`;
+      const state = chatStatesRef.current[key] ?? { messages: [], knownCount: 0 };
+      applyMessages(key, GiftedChat.append(state.messages, [locationMsg]));
+
+      // Send as plain text over the wire
+      try {
+        if (mode === 'group') {
+          await fetch(`${baseUrl}/msgGroup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ group_name: gname, message: locationMsg.text }),
+          });
+        } else {
+          const peer     = lobbyPeersRaw?.find(p => p.dest_hash === hash);
+          const endpoint = peer?.is_saved_contact ? '/msgContact' : '/msgDirect';
+          await fetch(`${baseUrl}${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ dest_hash: hash, message: locationMsg.text }),
+          });
+        }
+        // Mark as sent
+        locationMsg.offlineStatus = 'sent';
+      } catch {
+        locationMsg.offlineStatus = 'failed';
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '';
+      if (message === 'PERMISSION_DENIED') {
+        Alert.alert('需要定位權限', '請前往設定開啟定位權限以分享位置。');
+      } else {
+        Alert.alert('定位失敗', '無法取得目前位置，請稍後再試。');
+      }
+    } finally {
+      setLocationLoading(false);
+    }
+  }, [baseUrl, applyMessages, lobbyPeersRaw, groupRoomsRaw]);
+
   // ── 快速加入 ──────────────────────────────────────────────────────────────
   const quickJoinGroup = useCallback(async () => {
     const gname = selectedGroupRef.current;
@@ -288,6 +359,34 @@ export default function ChatScreen() {
   }, [baseUrl, refreshGroups]);
 
   // ── GiftedChat 渲染函式 ───────────────────────────────────────────────────
+
+  const renderCustomView = (props: any) => {
+    const msg = props.currentMessage as LocationMessage;
+    if (!msg?.location) return null;
+    return <LocationMessageBubble currentMessage={msg} />;
+  };
+
+  const renderActions = (props: any) => {
+    const canAct = !!chatMode && !joinPending;
+    return (
+      <TouchableOpacity
+        style={styles.locationBtn}
+        onPress={sendLocation}
+        disabled={!canAct || locationLoading}
+        activeOpacity={0.6}
+      >
+        {locationLoading ? (
+          <ActivityIndicator size={20} color={isGroupMode ? '#0B6EFD' : '#00C853'} />
+        ) : (
+          <Ionicons
+            name="location-sharp"
+            size={24}
+            color={canAct ? (isGroupMode ? '#0B6EFD' : '#00C853') : '#AAAAAA'}
+          />
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const renderBubble = (props: any) => {
     const isMe = props.currentMessage?.user?._id === MY_USER_ID;
@@ -529,6 +628,8 @@ export default function ChatScreen() {
           renderSystemMessage={renderSystemMessage}
           renderInputToolbar={renderInputToolbar}
           renderSend={renderSend}
+          renderCustomView={renderCustomView}
+          renderActions={renderActions}
           messagesContainerStyle={{ backgroundColor: isGroupMode ? '#E8EFF8' : '#E5DDD5' }}
           textInputProps={{
             placeholder: inputPlaceholder(),
@@ -721,6 +822,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, marginHorizontal: 8,
   },
   sendContainer: { justifyContent: 'center', alignItems: 'center', marginRight: 12, marginBottom: 8 },
+  locationBtn: {
+    justifyContent: 'center', alignItems: 'center',
+    width: 40, height: 44,
+    marginLeft: 4, marginBottom: 4,
+  },
   tickContainer: { alignItems: 'flex-end', marginRight: 8, marginTop: -4 },
   tick:          { fontSize: 12, color: 'rgba(0,0,0,0.4)' },
 
