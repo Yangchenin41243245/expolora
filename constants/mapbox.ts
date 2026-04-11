@@ -1,9 +1,8 @@
 // filepath: constants/mapbox.ts
 // Mapbox configuration constants for the location sharing feature.
-// Token is imported from secrets.ts (git-ignored — fill in your tokens there).
+// Token should be provided via the EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN environment variable.
 
-import { MAPBOX_ACCESS_TOKEN } from './secrets';
-export { MAPBOX_ACCESS_TOKEN };
+export const MAPBOX_ACCESS_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
 
 /** Default Mapbox style for the mini-map in chat bubbles */
 export const MAP_STYLE_URL = 'mapbox://styles/mapbox/streets-v12';
