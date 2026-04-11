@@ -39,7 +39,7 @@ This command will move the starter code to the **app-example** directory and cre
 
 This project integrates Mapbox and location-sharing features, which require a **Custom Native Build**. Standard Expo Go cannot be used.
 
-### Build and Test (Android)
+### Build and Test (Android) (Contributed by jongcs)
 
 To build and run the app for Android, you must provide your Mapbox download token:
 
