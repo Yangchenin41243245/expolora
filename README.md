@@ -51,7 +51,7 @@ export RNMAPBOX_MAPS_DOWNLOAD_TOKEN=your_token_here
 npx expo prebuild --clean
 
 # Run the app on an Android device or emulator
-npx expo run:android
+npx expo run:android --device
 ```
 
 > **Note:** The `RNMAPBOX_MAPS_DOWNLOAD_TOKEN` is required by the Mapbox SDK to download native dependencies during the build process.
