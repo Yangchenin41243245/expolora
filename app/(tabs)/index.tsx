@@ -25,9 +25,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import LocationMessageBubble from '../../components/LocationMessageBubble';
-import { useMessaging } from '../context/MessagingContext';
 import type { LocationMessage } from '../../types/chat';
 import { getCurrentLocation } from '../../utils/location';
+import { useMessaging } from '../context/MessagingContext';
 
 // ── 常數 ──────────────────────────────────────────────────────────────────────
 
@@ -634,7 +634,7 @@ export default function ChatScreen() {
           textInputProps={{
             placeholder: inputPlaceholder(),
             placeholderTextColor: '#999',
-            style: { fontSize: 16 },
+            style: { fontSize: 16, color: '#000' },
             editable: !!chatMode && !joinPending,
           }}
           listProps={{ keyboardShouldPersistTaps: 'handled' }}
