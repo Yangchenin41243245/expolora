@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Preview Android APK
 on:
   push:
     branches: [ main ]
