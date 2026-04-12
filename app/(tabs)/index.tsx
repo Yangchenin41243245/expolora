@@ -1,6 +1,6 @@
 // filepath: app/(tabs)/index.tsx
 import { Ionicons } from '@expo/vector-icons';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useHeaderHeight } from '@react-navigation/elements';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -107,7 +107,7 @@ export default function ChatScreen() {
   const lobbyPeers    = lobbyPeersRaw    ?? [];
   const groupRooms    = groupRoomsRaw    ?? [];
   const refreshGroups = refreshGroupsRaw ?? (async () => {});
-  const tabBarHeight  = useBottomTabBarHeight();
+  const headerHeight  = useHeaderHeight();
 
   // ── 選擇狀態：純字串，不存物件，從根本避免無限迴圈 ──────────────────────
   const [chatMode, setChatMode]                   = useState<ChatMode>(null);
@@ -627,7 +627,7 @@ export default function ChatScreen() {
           renderActions={renderActions}
           messagesContainerStyle={{ backgroundColor: isGroupMode ? '#E8EFF8' : '#E5DDD5' }}
           keyboardAvoidingViewProps={{
-            keyboardVerticalOffset: 52 + tabBarHeight,
+            keyboardVerticalOffset: headerHeight + 52,
           }}
           textInputProps={{
             placeholder: inputPlaceholder(),
