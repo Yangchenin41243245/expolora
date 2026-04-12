@@ -10,7 +10,7 @@ import React, {
 } from 'react';
 
 // ── 預設值 ────────────────────────────────────────────
-export const DEFAULT_HOST = '10.165.0.78';
+export const DEFAULT_HOST = 'rns-chat.local';
 export const DEFAULT_PORT = 5000;
 const LOBBY_POLL_MS  = 5000;
 const GROUPS_POLL_MS = 10000;

@@ -41,3 +41,7 @@ app-example
 # generated native folders
 /ios
 /android
+
+# secrets (API keys)
+constants/secrets.ts
+.env

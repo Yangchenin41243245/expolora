@@ -1,0 +1,38 @@
+name: Build Android APK
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Checkout
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 🟦 Setup Expo
+        uses: expo/expo-github-action@main
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📦 Install Dependencies
+        run: npm install
+
+      - name: 🚀 Build APK (Local)
+        run: eas build --local --platform android --profile production --non-interactive
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx8g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError" -Dorg.gradle.parallel=true -Dorg.gradle.workers.max=4
+
+      - name: 📥 Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./*.apk
