@@ -1,12 +1,11 @@
 // filepath: app/(tabs)/index.tsx
 import { Ionicons } from '@expo/vector-icons';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -22,7 +21,6 @@ import {
   Send,
   SystemMessage,
 } from 'react-native-gifted-chat';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import LocationMessageBubble from '../../components/LocationMessageBubble';
 import type { LocationMessage } from '../../types/chat';
@@ -109,6 +107,7 @@ export default function ChatScreen() {
   const lobbyPeers    = lobbyPeersRaw    ?? [];
   const groupRooms    = groupRoomsRaw    ?? [];
   const refreshGroups = refreshGroupsRaw ?? (async () => {});
+  const tabBarHeight  = useBottomTabBarHeight();
 
   // ── 選擇狀態：純字串，不存物件，從根本避免無限迴圈 ──────────────────────
   const [chatMode, setChatMode]                   = useState<ChatMode>(null);
@@ -482,7 +481,7 @@ export default function ChatScreen() {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F6F6F6" />
 
       {/* ── Header ── */}
@@ -615,11 +614,7 @@ export default function ChatScreen() {
       )}
 
       {/* ── 對話區 ── */}
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'android' ? 'padding' : 'height'}
-        keyboardVerticalOffset={100}
-      >
+      <View style={{ flex: 1 }}>
         <GiftedChat
           messages={messages}
           onSend={onSend}
@@ -631,6 +626,9 @@ export default function ChatScreen() {
           renderCustomView={renderCustomView}
           renderActions={renderActions}
           messagesContainerStyle={{ backgroundColor: isGroupMode ? '#E8EFF8' : '#E5DDD5' }}
+          keyboardAvoidingViewProps={{
+            keyboardVerticalOffset: 52 + tabBarHeight,
+          }}
           textInputProps={{
             placeholder: inputPlaceholder(),
             placeholderTextColor: '#999',
@@ -640,12 +638,12 @@ export default function ChatScreen() {
           listProps={{ keyboardShouldPersistTaps: 'handled' }}
           isSendButtonAlwaysVisible
           isScrollToBottomEnabled
-          scrollToBottomOffset={150}
+          scrollToBottomOffset={100}
           timeFormat="HH:mm"
           dateFormat="YYYY年M月D日"
           renderFooter={() => <JoinBanner />}
         />
-      </KeyboardAvoidingView>
+      </View>
 
       {/* ── 快速加入 Modal ── */}
       <QuickJoinModal
@@ -654,7 +652,7 @@ export default function ChatScreen() {
         onJoin={quickJoinGroup}
         onClose={() => setShowJoinModal(false)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
