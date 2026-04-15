@@ -1,4 +1,5 @@
 // filepath: app/(tabs)/contacts.tsx
+import { Tabs } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -273,21 +274,24 @@ export default function contacts() {
   return (
     <View style={styles.container}>
 
-      {/* 頂部 Bar */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>聯絡人管理</Text>
-        <View style={styles.headerRight}>
-          {lastRefresh && (
-            <Text style={styles.headerTime}>{lastRefresh.toLocaleTimeString('zh-TW')}</Text>
-          )}
-          <TouchableOpacity style={styles.refreshIconBtn} onPress={refreshAll} disabled={loading}>
-            {loading
-              ? <ActivityIndicator size="small" color="#4a90e2" />
-              : <Text style={styles.refreshIcon}>↻</Text>
-            }
-          </TouchableOpacity>
-        </View>
-      </View>
+      {/* 原頂部 Bar 已移至 Tabs Header */}
+      <Tabs.Screen
+        options={{
+          headerRight: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 15, gap: 10 }}>
+              {lastRefresh && (
+                <Text style={styles.headerTime}>{lastRefresh.toLocaleTimeString('zh-TW')}</Text>
+              )}
+              <TouchableOpacity style={styles.refreshIconBtn} onPress={refreshAll} disabled={loading}>
+                {loading
+                  ? <ActivityIndicator size="small" color="#4a90e2" />
+                  : <Text style={styles.refreshIcon}>↻</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          ),
+        }}
+      />
 
       {/* Tab 列 */}
       <View style={styles.tabBar}>
@@ -316,7 +320,7 @@ export default function contacts() {
             data={contacts}
             keyExtractor={i => i.dest_hash}
             renderItem={({ item }) => <ContactRow item={item} />}
-            ListEmptyComponent={<EmptyState icon="🤝" msg="尚無已儲存聯絡人\n從 Lobby 新增節點" />}
+            ListEmptyComponent={<EmptyState icon="🤝" msg={"尚無已儲存聯絡人\n從 Lobby 新增節點"} />}
             contentContainerStyle={contacts.length === 0 && styles.listEmpty}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
           />
