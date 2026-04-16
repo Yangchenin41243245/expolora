@@ -1,4 +1,4 @@
-# 這是測試用的branch，用於測試fork並修改後的後端，會在幾個小時後刪除。
+# 這是測試用的branch，用於測試 yangchenin fork並修改後的後端，會在之後刪除。
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
