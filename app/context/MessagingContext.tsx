@@ -168,27 +168,48 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   // ── 抓取單一群組房間狀態 ─────────────────────────────
+  //
+  // 回傳值語意：
+  //   GroupRoom  → 成功取得
+  //   null       → 後端明確回傳 404（群組不存在，可從清單移除）
+  //   undefined  → 網路錯誤 / 後端暫時無法連線（保留在清單，下次再試）
 
   const fetchOneGroup = useCallback(
-    async (group_name: string): Promise<GroupRoom | null> => {
+    async (group_name: string): Promise<GroupRoom | null | undefined> => {
       try {
         const res = await fetch(
           `http://${hostRef.current}:${portRef.current}/getGroupChat/${group_name}`,
           { headers: { Accept: 'application/json' } }
         );
-        if (!res.ok) return null;
+        if (res.status === 404) return null;   // 群組確實不存在
+        if (!res.ok) return undefined;         // 其他 HTTP 錯誤，保守保留
         const json = await res.json();
-        // 後端回傳 data.group_room，包含 group_name / self_name / join_confirm
-        // members 目前後端不在 group_room 內，若後端有補上則自動帶入
         return (json?.data?.group_room as GroupRoom) ?? null;
       } catch {
-        return null;
+        return undefined;                      // 網路錯誤，保留群組
       }
     },
     []
   );
 
-  // ── refreshGroups：依 AsyncStorage 清單逐一抓取 ──────
+  // ── fetchAllGroupsFromBackend：從後端取得所有已知群組名稱 ──
+
+  const fetchAllGroupsFromBackend = useCallback(async (): Promise<string[]> => {
+    try {
+      const res = await fetch(
+        `http://${hostRef.current}:${portRef.current}/getGroups`,
+        { headers: { Accept: 'application/json' } }
+      );
+      if (!res.ok) return [];
+      const json = await res.json();
+      const groups: GroupRoom[] = json?.data?.groups ?? [];
+      return groups.map(g => g.group_name).filter(Boolean);
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // ── refreshGroups：合併後端清單 + AsyncStorage 清單後逐一抓取 ──
 
   // 防止 unregisterGroup 執行中時 refreshGroups 把群組復原
   const pendingRemoveRef = useRef<Set<string>>(new Set());
@@ -196,23 +217,36 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
   const refreshGroups = useCallback(async () => {
     setGroupsLoading(true);
     try {
-      const names = await loadKnownGroupNames();
-      const filteredNames = names.filter(n => !pendingRemoveRef.current.has(n));
-      if (filteredNames.length === 0) {
+      // Step 1：從後端取得所有已知群組名稱（/getGroups），合併到 AsyncStorage
+      const backendNames = await fetchAllGroupsFromBackend();
+      const localNames   = await loadKnownGroupNames();
+      const merged = [...new Set([...localNames, ...backendNames])].filter(
+        n => !pendingRemoveRef.current.has(n)
+      );
+      if (backendNames.length > 0 && merged.length !== localNames.length) {
+        await saveKnownGroupNames(merged);
+      }
+
+      if (merged.length === 0) {
         setGroupRooms([]);
         return;
       }
-      const results = await Promise.all(filteredNames.map(fetchOneGroup));
-      const valid = results.filter((r): r is GroupRoom => r !== null);
-      const survivingNames = filteredNames.filter((_, i) => results[i] !== null);
-      if (survivingNames.length !== filteredNames.length) {
+
+      // Step 2：逐一抓取詳細狀態
+      const results = await Promise.all(merged.map(fetchOneGroup));
+
+      // null  → 後端確認 404，從清單移除
+      // undefined → 網路錯誤，保留清單但不顯示
+      const valid         = results.filter((r): r is GroupRoom => r != null);
+      const survivingNames = merged.filter((_, i) => results[i] !== null); // 保留 undefined（網路錯誤）
+      if (survivingNames.length !== merged.length) {
         await saveKnownGroupNames(survivingNames);
       }
       setGroupRooms(valid);
     } finally {
       setGroupsLoading(false);
     }
-  }, [loadKnownGroupNames, fetchOneGroup, saveKnownGroupNames]);
+  }, [loadKnownGroupNames, fetchOneGroup, fetchAllGroupsFromBackend, saveKnownGroupNames]);
 
   // ── registerGroup：新增群組到已知清單並立即載入 ──────
 
@@ -223,7 +257,8 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
         await saveKnownGroupNames([...names, group_name]);
       }
       const room = await fetchOneGroup(group_name);
-      if (room) {
+      // room 為 null（404）時不更新畫面；undefined（網路錯誤）也跳過
+      if (room != null) {
         setGroupRooms(prev => {
           const others = prev.filter(r => r.group_name !== group_name);
           return [...others, room];
