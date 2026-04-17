@@ -2,6 +2,8 @@
 
 在下一版後端出來之前暫時作為硬體驗證與先行展示用
 [`適用的後端連結`](https://github.com/Yangchenin41243245/rns_app-core/tree/master)
+
+[`APK檔`](https://drive.google.com/file/d/1ZkovEexajP7kKuZAnDjT9gmdpV01uyLQ/view?usp=drive_link)
 ## Get started
 
 1. Install dependencies
