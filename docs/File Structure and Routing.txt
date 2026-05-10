@@ -1,0 +1,365 @@
+================================================================================
+  Expolora — 檔案連結結構、路由層級與模組協作
+================================================================================
+
+目錄
+────
+1. Expo Router 路由機制概覽
+2. 路由樹（上下層級）
+3. Layout 檔案的作用
+4. MessagingContext 的跨頁共享
+5. 各層級協作圖
+6. 共用模組詳解（components / hooks / utils / constants / types）
+7. 同層頁面的協作關係
+
+
+================================================================================
+1. Expo Router 路由機制概覽
+================================================================================
+
+Expolora 使用 expo-router，採「檔案即路由」(file-based routing) 設計：
+  - app/ 目錄下的每個 .tsx 檔案對應一個畫面（Screen）
+  - 資料夾名稱即 URL 路徑段
+  - _layout.tsx 為該層的「包裝器」（不是畫面，是導覽容器）
+  - (tabs) 資料夾名稱中的括號表示「路由群組」，不計入 URL 路徑
+
+進入點由 package.json 指定：
+  "main": "expo-router/entry"
+
+app.json 啟用型別化路由：
+  "experiments": {
+    "typedRoutes": true,
+    "reactCompiler": true
+  }
+
+
+================================================================================
+2. 路由樹（上下層級）
+================================================================================
+
+  app/
+  ├── _layout.tsx          ← 根 Layout（Stack 導覽器）
+  │
+  ├── (tabs)/              ← 路由群組（URL 中不出現 "(tabs)"）
+  │   ├── _layout.tsx      ← Tab 導覽器 Layout（包住 MessagingProvider）
+  │   ├── index.tsx        ← /           → Tab: CHAT
+  │   ├── contacts.tsx     ← /contacts   → Tab: CONTACTS
+  │   ├── groups.tsx       ← /groups     → Tab: GROUPS
+  │   ├── identity.tsx     ← /identity   → Tab: IDENTITY
+  │   ├── j_settings.tsx   ← /j_settings → Tab: JSON
+  │   └── context/
+  │       └── MessagingContext.tsx  ← 全域共享狀態（非路由）
+  │
+  └── modal.tsx            ← /modal      → 獨立 Modal 畫面（Stack push）
+
+層級關係（由外到內）：
+
+  RootLayout（Stack）
+      └── TabLayout（Tabs）      ← MessagingProvider 在此包住所有 Tab
+              ├── index          ← ChatScreen
+              ├── contacts       ← contacts()
+              ├── groups         ← GroupsScreen
+              ├── identity       ← identity()
+              └── j_settings     ← j_settings()
+
+
+================================================================================
+3. Layout 檔案的作用
+================================================================================
+
+────────────────────────────────────────────────────────
+app/_layout.tsx  —  根 Layout（Stack 導覽器）
+────────────────────────────────────────────────────────
+
+  import { Stack } from 'expo-router';
+
+  export default function RootLayout() {
+    return <Stack screenOptions={{ headerShown: false }} />;
+  }
+
+功能：
+  - 建立最外層的 Stack（堆疊）導覽器
+  - headerShown: false 隱藏所有子畫面的原生 Header
+  - 所有路由（含 (tabs) 和 modal）都是這個 Stack 的子節點
+  - 讓 modal.tsx 能以「推入 Stack」方式疊在 Tab 頁上層
+
+────────────────────────────────────────────────────────
+app/(tabs)/_layout.tsx  —  Tab 導覽器 Layout
+────────────────────────────────────────────────────────
+
+  import { Tabs } from 'expo-router';
+  import { MessagingProvider } from '../context/MessagingContext';
+
+  export default function TabLayout() {
+    return (
+      <MessagingProvider>         {/* ← 所有 Tab 共享的 Context */}
+        <Tabs screenOptions={{ ... }}>
+          <Tabs.Screen name="index"      options={{ title: 'SNS對話', tabBarLabel: 'CHAT',     ... }} />
+          <Tabs.Screen name="contacts"   options={{ title: '聯絡人',  tabBarLabel: 'CONTACTS', ... }} />
+          <Tabs.Screen name="groups"     options={{ title: '群組',    tabBarLabel: 'GROUPS',   ... }} />
+          <Tabs.Screen name="identity"   options={{ title: '個別資訊',tabBarLabel: 'IDENTITY', ... }} />
+          <Tabs.Screen name="j_settings" options={{ title: '設定',    tabBarLabel: 'JSON',     ... }} />
+        </Tabs>
+      </MessagingProvider>
+    );
+  }
+
+功能：
+  - 建立底部 Tab Bar（5 個 Tab）
+  - MessagingProvider 包住 Tabs，讓所有子 Screen 都能呼叫 useMessaging()
+  - 每個 Tabs.Screen 的 name 必須與同層的 .tsx 檔名完全對應
+
+
+================================================================================
+4. MessagingContext 的跨頁共享
+================================================================================
+
+檔案：app/(tabs)/context/MessagingContext.tsx
+
+MessagingProvider 定義在 (tabs)/_layout.tsx 最外層，
+因此 5 個 Tab Screen 共享同一個 Context 實例，不重複建立。
+
+  // 任何 Tab Screen 內呼叫：
+  const { baseUrl, lobbyPeers, groupRooms, refreshGroups } = useMessaging();
+
+Context 提供的共享值：
+  ┌─────────────────────┬──────────────────────────────────────────────────┐
+  │ 值                  │ 說明                                             │
+  ├─────────────────────┼──────────────────────────────────────────────────┤
+  │ host / port         │ 後端連線設定，由 j_settings 寫入                 │
+  │ baseUrl             │ 組合後的 http://{host}:{port}                    │
+  │ setHost / setPort   │ 更新並同步寫入 AsyncStorage                      │
+  │ lobbyPeers          │ Lobby 節點清單（每 5 秒 GET /getLobby）          │
+  │ firstPeer           │ lobbyPeers[0]，j_settings 測試傳送用             │
+  │ groupRooms          │ 群組清單（每 10 秒 GET /getGroups）              │
+  │ groupsLoading       │ 群組資料載入中狀態                               │
+  │ refreshGroups       │ 手動觸發群組重新載入                             │
+  │ registerGroup       │ 新增群組到 AsyncStorage 並立即抓取               │
+  │ unregisterGroup     │ 從 AsyncStorage 移除群組（本地操作）             │
+  └─────────────────────┴──────────────────────────────────────────────────┘
+
+Context 內部輪詢邏輯（簡化）：
+
+  // Lobby：每 5 秒
+  useEffect(() => {
+    fetchLobby();
+    const t = setInterval(fetchLobby, 5000);
+    return () => clearInterval(t);
+  }, [fetchLobby]);
+
+  // 群組：每 10 秒（合併後端 + AsyncStorage 清單）
+  useEffect(() => {
+    refreshGroups();
+    const t = setInterval(refreshGroups, 10000);
+    return () => clearInterval(t);
+  }, [refreshGroups]);
+
+群組清單合併策略（refreshGroups）：
+  Step 1：GET /getGroups 取後端已知群組名稱
+  Step 2：讀取 AsyncStorage "known_group_names"
+  Step 3：合併去重（排除 pendingRemove 清單中的項目）
+  Step 4：對每個群組名稱呼叫 GET /getGroupChat/{name}
+         - 回傳 GroupRoom → 顯示
+         - 回傳 404 → 從清單移除（後端確認不存在）
+         - 網路錯誤 → 保留清單，本次不顯示（下次再試）
+
+
+================================================================================
+5. 各層級協作圖
+================================================================================
+
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  app/_layout.tsx  (Stack)                                        │
+  │  ┌────────────────────────────────────────────────────────────┐  │
+  │  │  app/(tabs)/_layout.tsx  (MessagingProvider + Tabs)        │  │
+  │  │                                                            │  │
+  │  │   ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐    │  │
+  │  │   │ index    │ │contacts  │ │ groups   │ │ identity │ …  │  │
+  │  │   │          │ │          │ │          │ │          │    │  │
+  │  │   │useMessaging()  ← 共用同一個 MessagingContext 實例      │  │
+  │  │   │          │ │          │ │          │ │          │    │  │
+  │  │   │ 自有輪詢  │ │ 手動刷新 │ │ 用Context│ │ 手動查詢 │    │  │
+  │  │   │/messages │ │ API 呼叫 │ │ groupRooms│ │ API 呼叫│    │  │
+  │  │   └──────────┘ └──────────┘ └──────────┘ └──────────┘    │  │
+  │  │                                                            │  │
+  │  │   共用的外部模組：                                          │  │
+  │  │   components/  hooks/  utils/  constants/  types/         │  │
+  │  └────────────────────────────────────────────────────────────┘  │
+  │                                                                  │
+  │  app/modal.tsx  (Stack push，疊在 Tab 上層)                      │
+  └──────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+6. 共用模組詳解
+================================================================================
+
+────────────────────────────────────────────────────────
+components/LocationMessageBubble.tsx
+────────────────────────────────────────────────────────
+使用者：index.tsx（聊天主畫面，自訂 GiftedChat 氣泡）
+用途：在聊天氣泡內渲染 Mapbox 小地圖顯示位置訊息
+
+依賴鏈：
+  LocationMessageBubble
+    ├── @rnmapbox/maps          → MapboxGL.MapView、Camera、PointAnnotation
+    ├── @expo/vector-icons      → Ionicons（位置圖示）
+    ├── constants/mapbox.ts     → MAPBOX_ACCESS_TOKEN、MAP_STYLE_URL、尺寸常數
+    ├── types/chat.ts           → LocationMessage、OfflineStatus
+    └── utils/location.ts       → ensureOfflineTiles（預下載離線地圖磚）
+
+核心邏輯：
+  // 模組載入時初始化 Mapbox Token（一次即可）
+  MapboxGL.setAccessToken(MAPBOX_ACCESS_TOKEN);
+
+  // 渲染位置時同步下載離線地圖磚
+  useEffect(() => {
+    if (location) ensureOfflineTiles(location.latitude, location.longitude);
+  }, [location]);
+
+  // Token 為空或地圖載入失敗 → 降級顯示座標文字
+  if (!MAPBOX_ACCESS_TOKEN || mapError) {
+    return <FallbackView lat={latitude} lng={longitude} />;
+  }
+
+────────────────────────────────────────────────────────
+types/chat.ts
+────────────────────────────────────────────────────────
+使用者：LocationMessageBubble、index.tsx（若啟用位置功能）
+用途：擴充 GiftedChat 的 IMessage，加入位置與離線狀態欄位
+
+  // 繼承 IMessage，新增兩個可選欄位
+  export interface LocationMessage extends IMessage {
+    location?: { latitude: number; longitude: number };
+    offlineStatus?: 'queued' | 'sending' | 'sent' | 'failed';
+  }
+
+────────────────────────────────────────────────────────
+constants/mapbox.ts
+────────────────────────────────────────────────────────
+使用者：LocationMessageBubble、utils/location.ts
+用途：集中管理 Mapbox 相關設定常數，Token 由環境變數注入
+
+  export const MAPBOX_ACCESS_TOKEN =
+    process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
+  export const MAP_STYLE_URL    = 'mapbox://styles/mapbox/streets-v12';
+  export const LOCATION_MAP_ZOOM = 14;
+  export const LOCATION_MAP_SIZE = { width: 220, height: 150 };
+  export const OFFLINE_PACK_BOUNDS_OFFSET = 0.01; // ~1.1 km
+  export const OFFLINE_PACK_MIN_ZOOM = 12;
+  export const OFFLINE_PACK_MAX_ZOOM = 16;
+
+Token 設定方式：在 .env 中加入：
+  EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=pk.eyJ1IjoiYW5...
+
+────────────────────────────────────────────────────────
+utils/location.ts
+────────────────────────────────────────────────────────
+使用者：LocationMessageBubble
+用途：GPS 定位取得與離線地圖磚下載
+
+  // 請求前景定位權限並取得座標
+  export async function getCurrentLocation() {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') throw new Error('PERMISSION_DENIED');
+    const loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+    return { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+  }
+
+  // 為指定座標預下載 ~2.2km 範圍的地圖磚
+  export async function ensureOfflineTiles(lat: number, lng: number) {
+    const packName = `loc_${lat.toFixed(4)}_${lng.toFixed(4)}`;
+    await MapboxGL.offlineManager.createPack({
+      name: packName,
+      styleURL: MAP_STYLE_URL,
+      bounds: [
+        [lng - 0.01, lat - 0.01],
+        [lng + 0.01, lat + 0.01],
+      ],
+      minZoom: 12, maxZoom: 16,
+    }, () => {}, () => {});
+    // 失敗靜默處理，離線磚為非必要功能
+  }
+
+────────────────────────────────────────────────────────
+hooks/use-color-scheme.ts
+────────────────────────────────────────────────────────
+  // 直接 re-export react-native 原生 hook
+  export { useColorScheme } from 'react-native';
+
+  // Web 平台有獨立實作：hooks/use-color-scheme.web.ts
+
+────────────────────────────────────────────────────────
+hooks/use-theme-color.ts
+────────────────────────────────────────────────────────
+使用者：themed-text、themed-view 等主題元件
+用途：依當前主題（light/dark）回傳對應色碼
+
+  export function useThemeColor(
+    props: { light?: string; dark?: string },
+    colorName: keyof typeof Colors.light & keyof typeof Colors.dark
+  ) {
+    const theme = useColorScheme() ?? 'light';
+    const colorFromProps = props[theme];
+    return colorFromProps ?? Colors[theme][colorName];
+  }
+
+
+================================================================================
+7. 同層頁面的協作關係
+================================================================================
+
+同在 (tabs)/ 下的 5 個頁面並不直接互相 import，
+而是透過以下三種方式協作：
+
+────────────────────────────────────────────────────────
+A. 透過 MessagingContext 共享狀態
+────────────────────────────────────────────────────────
+
+  j_settings ──setHost/setPort──► MessagingContext ──baseUrl──► index
+                                                   ──lobbyPeers──► contacts
+                                                   ──groupRooms──► groups
+                                                   ──lobbyPeers──► identity
+
+  情境：使用者在 j_settings 更改後端 IP →
+        Context 更新 host → 所有其他 Tab 的 API 請求自動使用新位址
+
+────────────────────────────────────────────────────────
+B. 透過 Context 的寫入方法協作
+────────────────────────────────────────────────────────
+
+  groups ──registerGroup(name)──► Context 更新 groupRooms
+                                    └──► index 的群組下拉選單即時反映
+
+  groups ──unregisterGroup(name)──► Context 從 groupRooms 移除
+                                      └──► index 的群組下拉選單消失
+
+  情境：在 groups 頁建立新群組 →
+        registerGroup 被呼叫 → index 頁的群組下拉選單立即出現新群組
+
+────────────────────────────────────────────────────────
+C. 資料流向總結
+────────────────────────────────────────────────────────
+
+  j_settings                        index
+  ── 設定 host/port ──────────────► 使用 baseUrl 發訊、輪詢
+  ── 測試傳送（firstPeer）          ── 顯示 lobbyPeers 下拉
+                                    ── 顯示 groupRooms 下拉
+
+  contacts                          identity
+  ── 儲存/封鎖聯絡人 ────────────► 查詢/清除該聯絡人紀錄
+  ── 資料完全獨立，不讀 Context
+
+  groups
+  ── registerGroup/unregisterGroup ─► 影響 index 的群組下拉
+  ── 建立、加入、新增成員
+
+  共用 Context 狀態（所有頁面皆讀取）：
+  lobbyPeers ← GET /getLobby（每 5 秒）
+  groupRooms ← GET /getGroups（每 10 秒）+ AsyncStorage
+
+================================================================================
+  文件版本：2026-05-09
+================================================================================

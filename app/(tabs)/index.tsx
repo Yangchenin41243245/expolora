@@ -2,23 +2,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import {
-  Bubble,
-  GiftedChat,
-  IMessage,
-  InputToolbar,
-  Send,
-  SystemMessage,
+    Bubble,
+    GiftedChat,
+    IMessage,
+    InputToolbar,
+    Send,
+    SystemMessage,
 } from 'react-native-gifted-chat';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMessaging } from '../context/MessagingContext';

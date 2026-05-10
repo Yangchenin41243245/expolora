@@ -1,0 +1,503 @@
+================================================================================
+  Expolora — GitHub 提交歷史紀錄
+  Repository: https://github.com/Yangchenin41243245/expolora
+  Branch: main / fortest_donotmerge
+================================================================================
+
+貢獻者
+────
+  Yangchenin41243245   (主要開發者，前端頁面與功能)
+  jongcs               (協作者，基礎建設、CI/CD、Mapbox 整合)
+
+
+================================================================================
+提交時間線（由新至舊）
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+[d7517a0]  2026-04-16  Yangchenin41243245
+  current progress
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（4 files, +934 / -124）：
+    A  app/(tabs)/index(mapbox).txt
+    R  app/(tabs)/index(without mapbox).txt
+       → app/(tabs)/index(without_mapbox).txt  (重新命名，移除空格)
+    M  app/(tabs)/index.tsx
+    M  app/context/MessagingContext.tsx
+
+  說明：
+    持續開發中的進度 commit。新增 Mapbox 版本的 index 備份文字檔，
+    同時修改主聊天頁面與 MessagingContext。
+
+────────────────────────────────────────────────────────────────────────────────
+[1a460f7]  2026-04-12  Yangchenin41243245
+  Merge branch 'main' of https://github.com/Yangchenin41243245/expolora
+────────────────────────────────────────────────────────────────────────────────
+  說明：同步遠端 main 分支的 Merge commit。
+
+────────────────────────────────────────────────────────────────────────────────
+[61a05b3]  2026-04-12  Yangchenin41243245
+  add txt file for web-side testing and code mapping
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（1 file, +775）：
+    A  app/(tabs)/index(without mapbox).txt
+
+  說明：
+    新增不含 Mapbox 版本的 index 頁面備份，供 Web 端測試與程式碼對照用。
+
+────────────────────────────────────────────────────────────────────────────────
+[e9044c5]  2026-04-12  jongcs
+  Merge pull request #9 from Yangchenin41243245/ci
+────────────────────────────────────────────────────────────────────────────────
+  說明：合併 PR #9，引入 GitHub Actions CI 流程。
+
+────────────────────────────────────────────────────────────────────────────────
+[7a6835e]  2026-04-12  jongcs
+  chore: bump app version to 1.0.1
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（2 files, +7 / -5）：
+    M  app.json
+    M  package.json
+
+  說明：
+    將 App 版本號從 1.0.0 升至 1.0.1，配合 CI/CD 自動化發佈流程。
+
+────────────────────────────────────────────────────────────────────────────────
+[b366100]  2026-04-12  jongcs
+  ci: add GitHub Actions for automated Android APK builds and configure
+      build properties for production releases
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（4 files, +105 / -1）：
+    A  .github/workflows/apk-build.yml
+    A  .github/workflows/release-build.yml
+    M  app.json
+    M  eas.json
+
+  說明：
+    建立兩個 GitHub Actions Workflow：
+    - apk-build.yml：觸發式 APK Build（手動或 Push 觸發）
+    - release-build.yml：正式版本自動化 Release Build
+    同時更新 app.json 與 eas.json 的 build 設定（buildArchs、autoIncrement）。
+
+────────────────────────────────────────────────────────────────────────────────
+[bf315c4]  2026-04-12  jongcs
+  chore: migrate Mapbox token to environment variables
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（4 files, +5 / -9）：
+    A  .env.example
+    M  .gitignore
+    M  constants/mapbox.ts
+    D  constants/secrets.ts.example
+
+  說明：
+    將 Mapbox Access Token 從 secrets.ts.example 硬編碼移至環境變數：
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN
+    新增 .env.example 提供設定範本。
+    刪除舊的 secrets.ts.example。
+    更新 .gitignore 排除 .env 檔案。
+
+    constants/mapbox.ts 改為：
+      export const MAPBOX_ACCESS_TOKEN =
+        process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
+
+────────────────────────────────────────────────────────────────────────────────
+[39d86c7]  2026-04-12  jongcs
+  Merge pull request #8 from Yangchenin41243245/host
+────────────────────────────────────────────────────────────────────────────────
+  說明：合併 PR #8，更新預設後端主機位址。
+
+────────────────────────────────────────────────────────────────────────────────
+[e5b119c]  2026-04-12  Yangchenin41243245
+  feat: update default API host to rns-chat.local
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（1 file, +1 / -1）：
+    M  app/context/MessagingContext.tsx
+
+  說明：
+    將 MessagingContext 的預設 Host 從 IP 位址更新為 mDNS 主機名稱：
+      DEFAULT_HOST = 'rns-chat.local'
+    透過後端的 zeroconf mDNS 廣播，手機可自動解析到電腦 IP，
+    無需手動在 j_settings 設定。
+
+────────────────────────────────────────────────────────────────────────────────
+[25fe132]  2026-04-11  Yangchenin41243245
+  Merge pull request #6 from jongcs/feat/sendlocation
+────────────────────────────────────────────────────────────────────────────────
+  說明：合併 PR #6，引入位置分享功能。
+
+────────────────────────────────────────────────────────────────────────────────
+[9617600]  2026-04-11  Yangchenin41243245
+  Merge pull request #7 from Yangchenin41243245/dev
+────────────────────────────────────────────────────────────────────────────────
+  說明：合併 PR #7 dev 分支修改。
+
+────────────────────────────────────────────────────────────────────────────────
+[07bcd00]  2026-04-11  Yangchenin41243245
+  Add owner and permissions to app.json
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（1 file, +16 / -2）：
+    M  app.json
+
+  說明：
+    補充 app.json 設定：
+    - owner: "rns-team"
+    - Android 定位權限：ACCESS_COARSE_LOCATION、ACCESS_FINE_LOCATION
+
+────────────────────────────────────────────────────────────────────────────────
+[370e961]  2026-04-11  Yangchenin41243245
+  Add owner and permissions to app.json
+────────────────────────────────────────────────────────────────────────────────
+  說明：同上，前一個 commit 的前次嘗試（內容相同）。
+
+────────────────────────────────────────────────────────────────────────────────
+[821a9fd]  2026-04-11  jongcs
+  docs: update android run command to use device flag in README
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（1 file, +1 / -1）：
+    M  README.md
+
+  說明：
+    更新 README 中 Android 執行指令，加入 --device 參數以指定實體裝置。
+
+────────────────────────────────────────────────────────────────────────────────
+[dabeede]  2026-04-11  jongcs
+  chore: remove MAPBOX_DOWNLOAD_TOKEN from secrets file
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（1 file, -6）：
+    M  constants/secrets.ts.example
+
+  說明：
+    從 secrets 範本中移除 Mapbox Download Token 欄位（後移至環境變數管理）。
+
+────────────────────────────────────────────────────────────────────────────────
+[3451a6a]  2026-04-09  Yangchenin41243245
+  fix group conv errors
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（3 files, +328 / -67）：
+    M  app/(tabs)/index.tsx
+    M  app/(tabs)/j_settings.tsx
+    M  app/context/MessagingContext.tsx
+
+  說明：
+    修復群組對話相關錯誤，涵蓋：
+    - index.tsx 群組訊息輪詢與顯示邏輯
+    - j_settings.tsx 群組 Debug 面板
+    - MessagingContext 群組狀態管理
+
+────────────────────────────────────────────────────────────────────────────────
+[c158699]  2026-04-09  jongcs
+  docs: add instructions for Mapbox integration and custom native Android
+        builds to README
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（1 file, +21）：
+    M  README.md
+
+  說明：
+    README 補充 Mapbox 整合說明：
+    - 需要 Mapbox Download Token 才能編譯 Android
+    - 說明需使用 EAS Build 或本地 prebuild，無法直接用 Expo Go
+
+────────────────────────────────────────────────────────────────────────────────
+[c9ee27e]  2026-04-09  jongcs
+  feat: integrate Mapbox and expo-location to support shared location
+        messages with offline tile caching
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（11 files, +765 / -7）：
+    M  .gitignore
+    M  .vscode/settings.json
+    M  app.json                        （新增 @rnmapbox/maps、expo-location 插件）
+    M  app/(tabs)/index.tsx            （整合 LocationMessageBubble）
+    A  components/LocationMessageBubble.tsx   （新增：Mapbox 地圖氣泡元件）
+    A  constants/mapbox.ts             （新增：Mapbox 設定常數）
+    A  constants/secrets.ts.example    （新增：Token 範本）
+    M  package-lock.json
+    M  package.json                    （新增 @rnmapbox/maps、expo-location）
+    A  types/chat.ts                   （新增：LocationMessage、OfflineStatus）
+    A  utils/location.ts               （新增：GPS 定位與離線地圖磚工具）
+
+  說明：
+    引入完整的位置分享功能：
+    - LocationMessageBubble：在聊天氣泡中渲染 Mapbox 小地圖
+    - ensureOfflineTiles：自動預下載 ~2.2km 範圍的離線地圖磚
+    - LocationMessage 型別：擴充 GiftedChat IMessage，加入位置與離線狀態
+    - Fallback UI：Token 空白或地圖載入失敗時顯示座標文字
+
+────────────────────────────────────────────────────────────────────────────────
+[b62e2fc]  2026-04-09  Yangchenin41243245
+  update group conv feature
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（2 files, +235 / -56）：
+    M  app/(tabs)/groups.tsx
+    M  app/context/MessagingContext.tsx
+
+  說明：
+    大幅更新群組功能：
+    - groups.tsx：完善群組列表、建立/加入/新增成員流程
+    - MessagingContext：改進群組清單合併策略（後端 + AsyncStorage）
+
+────────────────────────────────────────────────────────────────────────────────
+[8739ccd]  2026-04-08  Yangchenin41243245
+  fix index error
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（1 file, +338 / -547）：
+    M  app/(tabs)/index.tsx
+
+  說明：
+    修復聊天主頁面的錯誤，大幅重構 index.tsx 的訊息處理邏輯
+    （+338 行新增，-547 行刪除，淨減少 209 行）。
+
+────────────────────────────────────────────────────────────────────────────────
+[eb76d1b]  2026-04-08  Yangchenin41243245
+  update expo router config
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（5 files, +1913 / -279）：
+    M  app/(tabs)/_layout.tsx
+    A  app/(tabs)/groups.tsx           （新增：群組管理頁面）
+    M  app/(tabs)/identity.tsx
+    M  app/(tabs)/index.tsx
+    M  app/(tabs)/j_settings.tsx
+
+  說明：
+    重要里程碑：新增群組管理頁面（groups.tsx），
+    成為第 4 個 Tab（GROUPS），Tab 列從 4 個擴充為 5 個。
+    同時更新路由設定與其他頁面。
+
+────────────────────────────────────────────────────────────────────────────────
+[1d5dd7a]  2026-04-07  Yangchenin41243245
+  update screen names
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（2 files, +18 / -18）：
+    M  app/(tabs)/_layout.tsx
+    M  app/(tabs)/contacts.tsx
+
+  說明：
+    更新 Tab 顯示名稱（title 與 tabBarLabel）。
+
+────────────────────────────────────────────────────────────────────────────────
+[c919cd5]  2026-04-07  Yangchenin41243245
+  update screen names
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（3 files, 重新命名）：
+    R  app/(tabs)/screen1.tsx  →  app/(tabs)/contacts.tsx
+    R  app/(tabs)/screen2.tsx  →  app/(tabs)/identity.tsx
+    R  app/(tabs)/screen3.tsx  →  app/(tabs)/j_settings.tsx
+
+  說明：
+    重命名三個頁面檔案，從通用的 screen1/2/3 改為具語意的名稱：
+    contacts（聯絡人）、identity（對話紀錄）、j_settings（設定）。
+
+────────────────────────────────────────────────────────────────────────────────
+[c04e498]  2026-03-30  Yangchenin41243245
+  fix: keyboard no longer covers chat input bar
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（1 file）：
+    M  app/(tabs)/index.tsx
+
+  說明：
+    修復 Android 鍵盤彈出時遮蓋聊天輸入框的問題，
+    調整 KeyboardAvoidingView 設定。
+
+────────────────────────────────────────────────────────────────────────────────
+[fb9c6b8]  2026-03-30  jongcs
+  Remove duplicate dependencies and fix JSX escaping (#5)
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（2 files, +528 / -465）：
+    M  app/(tabs)/screen3.tsx
+    M  app/context/MessagingContext.tsx
+
+  說明：
+    清理重複的 npm dependencies，修復 JSX 中特殊字元轉義問題（如 & → &amp;）。
+
+────────────────────────────────────────────────────────────────────────────────
+[2c7487a]  2026-03-30  Yangchenin41243245
+  Merge pull request #4 from Yangchenin41243245/dev
+────────────────────────────────────────────────────────────────────────────────
+  說明：合併 PR #4。
+
+────────────────────────────────────────────────────────────────────────────────
+[52f5866]  2026-03-29  Yangchenin41243245
+  update expo router functions
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（9 files, +2131 / -289）：
+    M  app/(tabs)/_layout.tsx
+    M  app/(tabs)/index.tsx
+    A  app/(tabs)/screen1.tsx          （新增：聯絡人頁面前身）
+    M  app/(tabs)/screen2.tsx
+    M  app/(tabs)/screen3.tsx
+    M  app/context/MessagingContext.tsx
+    A  expolora_core.code-workspace    （新增：VS Code workspace 設定）
+    M  package-lock.json / package.json
+    A  start.bat                       （新增：Windows 快速啟動腳本）
+
+  說明：
+    大幅擴充 App 功能，新增聯絡人管理頁面（screen1）、
+    新增 VS Code workspace 與 Windows 啟動腳本。
+
+────────────────────────────────────────────────────────────────────────────────
+[c507b5d]  2026-03-26  Yangchenin41243245
+  Merge pull request #3 from jongcs/dev-persistent-ip
+────────────────────────────────────────────────────────────────────────────────
+  說明：合併 PR #3，引入 Host/Port 持久化功能。
+
+────────────────────────────────────────────────────────────────────────────────
+[17a8722]  2026-03-25  jongcs
+  feat: implement host and port settings persistence across restarts
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（4 files, +87 / -34）：
+    M  app/(tabs)/screen3.tsx
+    M  app/context/MessagingContext.tsx
+    M  package-lock.json / package.json
+
+  說明：
+    重要功能：透過 AsyncStorage 持久化後端 Host 與 Port 設定。
+    App 重啟後自動載入上次輸入的連線設定，不需重新輸入 IP。
+    新增 @react-native-async-storage/async-storage 套件。
+
+────────────────────────────────────────────────────────────────────────────────
+[a0caab6]  2026-03-24  Yangchenin41243245
+  Merge pull request #2 from Yangchenin41243245/dev
+────────────────────────────────────────────────────────────────────────────────
+  說明：合併 PR #2。
+
+────────────────────────────────────────────────────────────────────────────────
+[ed63302]  2026-03-24  Yangchenin41243245
+  update project
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（5 files, +2217 / -323）：
+    M  app/(tabs)/_layout.tsx
+    M  app/(tabs)/index.tsx
+    M  app/(tabs)/screen2.tsx
+    M  app/(tabs)/screen3.tsx
+    A  app/context/MessagingContext.tsx  （新增：全域 Context 首次加入）
+
+  說明：
+    重大架構更新：首次引入 MessagingContext，
+    建立全域共享的 host/port 狀態，取代各頁面分散管理連線設定。
+
+────────────────────────────────────────────────────────────────────────────────
+[219b50a]  2026-03-22  Yangchenin41243245
+  update screen3 testing button
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（2 files）：
+    M  app/(tabs)/index.tsx
+    M  app/(tabs)/screen3.tsx
+
+  說明：更新 screen3（設定頁）的測試傳送按鈕。
+
+────────────────────────────────────────────────────────────────────────────────
+[bace7b4]  2026-03-16  Yangchenin41243245
+  update screen3
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（5 files）：
+    A  .easignore.txt
+    M  app.json
+    M  app/(tabs)/screen3.tsx
+    D  network_security_config.xml     （刪除，改用 expo-build-properties）
+    M  package-lock.json / package.json
+    A  pnpm-lock.yaml
+
+  說明：
+    更新設定頁，刪除手動的 network_security_config.xml，
+    改由 expo-build-properties 的 usesCleartextTraffic 設定處理 HTTP 連線。
+    新增 EAS 忽略清單(.easignore.txt)。
+
+────────────────────────────────────────────────────────────────────────────────
+[820acd3]  2026-03-13  Yangchenin41243245
+  Merge pull request #1 from Yangchenin41243245/dev
+────────────────────────────────────────────────────────────────────────────────
+  說明：合併第一個 PR（dev → main）。
+
+────────────────────────────────────────────────────────────────────────────────
+[a19ef56]  2026-03-13  Yangchenin41243245
+  add new feature
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（7 files）：
+    M  app.json
+    M  app/(tabs)/index.tsx
+    M  app/(tabs)/screen3.tsx
+    A  eas.json                        （新增：EAS Build 設定）
+    A  network_security_config.xml     （新增：Android HTTP 明文設定）
+    M  package-lock.json / package.json
+
+  說明：
+    首次加入 EAS Build 設定（eas.json），
+    新增 Android network_security_config.xml 允許明文 HTTP 連線（連後端用）。
+
+────────────────────────────────────────────────────────────────────────────────
+[78d2f14]  2026-03-12  Yangchenin41243245
+  Initial commit
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（10 files, +469 / -247）：
+    M  app.json
+    M  app/(tabs)/_layout.tsx
+    D  app/(tabs)/explore.tsx          （刪除 Expo 預設的 Explore 頁）
+    M  app/(tabs)/index.tsx
+    A  app/(tabs)/screen2.tsx          （新增：第二個 Tab）
+    A  app/(tabs)/screen3.tsx          （新增：第三個 Tab）
+    M  app/_layout.tsx
+    M  package-lock.json / package.json
+
+  說明：
+    基於 Expo 模板客製化：移除預設 Explore 頁，
+    新增 screen2、screen3 作為新 Tab 的起點。
+
+────────────────────────────────────────────────────────────────────────────────
+[4c5bba9]  2026-03-10  Yangchenin41243245
+  Initial commit
+────────────────────────────────────────────────────────────────────────────────
+  變更檔案（35 files）：
+    全部為 Expo 專案初始化檔案，包含：
+    - app/ 路由結構（_layout.tsx、(tabs)/_layout.tsx、index.tsx、explore.tsx）
+    - assets/ 圖示與啟動畫面
+    - components/ 基礎元件（themed-text、haptic-tab、parallax-scroll-view 等）
+    - hooks/（use-color-scheme、use-theme-color）
+    - constants/theme.ts
+    - eslint.config.js、tsconfig.json、package.json
+
+  說明：
+    使用 Expo 官方模板建立專案，包含所有預設的 boilerplate 檔案。
+
+
+================================================================================
+PR 合併記錄
+================================================================================
+
+  PR #  合併者              分支                  說明
+  ────  ───────────────     ───────────────────   ──────────────────────────────
+  #1    Yangchenin41243245  dev → main            首次功能合併（eas.json、screen3）
+  #2    Yangchenin41243245  dev → main            MessagingContext 初版
+  #3    Yangchenin41243245  jongcs/dev-persistent-ip  Host/Port 持久化（AsyncStorage）
+  #4    Yangchenin41243245  dev → main            screen1（聯絡人）新增
+  #5    jongcs              —                     清除重複依賴、JSX 修正
+  #6    Yangchenin41243245  jongcs/feat/sendlocation  Mapbox 位置分享整合
+  #7    Yangchenin41243245  dev → main            app.json 補充設定
+  #8    jongcs              Yangchenin41243245/host  預設 Host 改為 rns-chat.local
+  #9    jongcs              Yangchenin41243245/ci    GitHub Actions CI 流程
+
+
+================================================================================
+功能演進時間軸
+================================================================================
+
+  2026-03-10  專案初始化（Expo 模板）
+  2026-03-12  新增 screen2、screen3，開始客製化
+  2026-03-13  引入 EAS Build，允許 HTTP 連線（Android）
+  2026-03-16  改用 expo-build-properties 管理 cleartext 設定
+  2026-03-24  ★ 引入 MessagingContext（全域狀態管理架構）
+  2026-03-25  ★ Host/Port 設定持久化（AsyncStorage）
+  2026-03-29  新增 screen1（聯絡人管理頁面前身）
+  2026-03-30  修復鍵盤遮擋、清理依賴
+  2026-04-07  重新命名頁面（screen1/2/3 → contacts/identity/j_settings）
+  2026-04-08  ★ 新增 groups.tsx（群組管理），Tab 擴充至 5 個
+  2026-04-09  ★ 整合 Mapbox + expo-location（位置分享）
+  2026-04-12  預設 Host 改為 rns-chat.local（mDNS 自動解析）
+  2026-04-12  ★ GitHub Actions CI/CD（自動化 APK Build）
+  2026-04-12  Mapbox Token 改用環境變數（安全性提升）
+  2026-04-12  App 版本升至 1.0.1
+  2026-04-16  持續開發中（index.tsx、MessagingContext 更新）
+
+
+================================================================================
+  文件版本：2026-05-09
+  資料來源：git log --pretty / --name-status
+================================================================================
