@@ -60,7 +60,7 @@ const formatTime = (ts?: number) => {
 // ── 主元件 ────────────────────────────────────────────────────────────────────
 
 export default function contacts() {
-  const { host, port } = useMessaging();
+  const { host, port, selfDestHash } = useMessaging();
   const baseUrl = `http://${host}:${port}`;
 
   const [tab, setTab] = useState<Tab>('contacts');
@@ -116,9 +116,10 @@ export default function contacts() {
   const loadLobby = useCallback(async () => {
     try {
       const json = await apiFetch('/getLobby');
-      setLobbyPeers(json?.data?.lobby ?? []);
+      const all: LobbyPeer[] = json?.data?.lobby ?? [];
+      setLobbyPeers(selfDestHash ? all.filter(p => p.dest_hash !== selfDestHash) : all);
     } catch { setLobbyPeers([]); }
-  }, [apiFetch]);
+  }, [apiFetch, selfDestHash]);
 
   const loadBlocklist = useCallback(async () => {
     try {

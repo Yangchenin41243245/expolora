@@ -112,7 +112,10 @@ const C = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function identity() {
-  const { baseUrl, lobbyPeers } = useMessaging();
+  const { baseUrl, selfDestHash, lobbyPeers: lobbyPeersRaw } = useMessaging();
+  const lobbyPeers = lobbyPeersRaw.filter(
+    p => !selfDestHash || p.dest_hash !== selfDestHash
+  );
 
   const [mode, setMode]           = useState<QueryMode>('contact');
   const [destHash, setDestHash]   = useState('');

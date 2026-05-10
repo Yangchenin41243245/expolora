@@ -101,12 +101,15 @@ const rawGroupMsgToIMessage = (
 export default function ChatScreen() {
   const {
     baseUrl,
+    selfDestHash,
     lobbyPeers:    lobbyPeersRaw,
     groupRooms:    groupRoomsRaw,
     refreshGroups: refreshGroupsRaw,
   } = useMessaging();
 
-  const lobbyPeers    = lobbyPeersRaw    ?? [];
+  const lobbyPeers    = (lobbyPeersRaw ?? []).filter(
+    p => !selfDestHash || p.dest_hash !== selfDestHash
+  );
   const groupRooms    = groupRoomsRaw    ?? [];
   const refreshGroups = refreshGroupsRaw ?? (async () => {});
 

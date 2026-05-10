@@ -1,9 +1,8 @@
 // filepath: app/(tabs)/groups.tsx
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -84,21 +83,17 @@ export default function GroupsScreen() {
   const [scene, setScene] = useState<ModalScene>({ type: 'none' });
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
-  // 進場動畫
-  const listAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(listAnim, {
-      toValue: 1, duration: 350, useNativeDriver: true,
-    }).start();
-  }, []);
-
   // 手動刷新
   const handleRefresh = useCallback(async () => {
     await refreshGroups();
     setLastRefresh(new Date());
   }, [refreshGroups]);
 
-  useEffect(() => { handleRefresh(); }, []);
+  useEffect(() => {
+    handleRefresh();
+    const t = setInterval(handleRefresh, 25000);
+    return () => clearInterval(t);
+  }, [handleRefresh]);
 
 
   // ── API helpers ───────────────────────────────────────────────────────────
@@ -175,21 +170,9 @@ export default function GroupsScreen() {
 
   const GroupRow = ({ item, index }: { item: GroupRoom; index: number }) => {
     const memberCount = item.members?.length ?? 0;
-    const rowAnim = useRef(new Animated.Value(0)).current;
-
-    useEffect(() => {
-      Animated.timing(rowAnim, {
-        toValue: 1,
-        duration: 280,
-        delay: index * 55,
-        useNativeDriver: true,
-      }).start();
-    }, []);
 
     return (
-      <Animated.View style={{
-        opacity: rowAnim,
-        transform: [{ translateY: rowAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
+      <View style={{
       }}>
         <TouchableOpacity
           style={styles.groupRow}
@@ -231,7 +214,7 @@ export default function GroupsScreen() {
 
           <Text style={styles.rowChevron}>›</Text>
         </TouchableOpacity>
-      </Animated.View>
+      </View>
     );
   };
 
@@ -298,7 +281,7 @@ export default function GroupsScreen() {
       </View>
 
       {/* 群組清單 */}
-      <Animated.View style={{ flex: 1, opacity: listAnim }}>
+      <View style={{ flex: 1 }}>
         <FlatList
           data={groupRooms}
           keyExtractor={r => r.group_name}
@@ -309,7 +292,7 @@ export default function GroupsScreen() {
           refreshing={groupsLoading}
           onRefresh={handleRefresh}
         />
-      </Animated.View>
+      </View>
 
       {/* ── Modals ── */}
 
