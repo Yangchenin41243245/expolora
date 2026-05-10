@@ -1,0 +1,408 @@
+================================================================================
+  Expolora — 技術實作細節
+  涵蓋：環境建置與啟動指南 / 輪詢機制與時序說明 / AsyncStorage 資料結構
+================================================================================
+
+
+================================================================================
+一、環境建置與啟動指南
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+1-1. 前置需求
+────────────────────────────────────────────────────────────────────────────────
+
+  項目                    版本要求          說明
+  ─────────────────────   ──────────────    ──────────────────────────────────
+  Node.js                 >= 18             JavaScript 執行環境
+  npm                     隨 Node.js        套件管理器
+  EAS CLI                 >= 18.3.0         Expo 雲端 Build 工具
+  Android Studio          最新版            Android Emulator（本地測試用）
+  Expo 帳號               —                 EAS Build 需登入
+  Mapbox Access Token     pk. 開頭          地圖顯示用（EXPO_PUBLIC_...）
+  Mapbox Download Token   sk. 開頭          Android 原生編譯用
+
+  EAS CLI 安裝：
+    npm install -g eas-cli
+
+────────────────────────────────────────────────────────────────────────────────
+1-2. 前端（Expolora App）建置流程
+────────────────────────────────────────────────────────────────────────────────
+
+  步驟 1：Clone 專案並安裝依賴
+  ─────────────────────────────
+    cd C:\dev\expolora
+    npm install
+
+  步驟 2：設定環境變數
+  ─────────────────────────────
+    複製 .env.example 為 .env：
+
+      .env 內容：
+        EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=pk.eyJ1Ijoieour-access-token...
+        MAPBOX_DOWNLOAD_TOKEN=sk.eyJ1Ijoieour-download-token...
+
+    說明：
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN  → 前端地圖渲染用，編譯時注入 JS Bundle
+      MAPBOX_DOWNLOAD_TOKEN            → Android 原生 SDK 下載用（gradle 讀取）
+
+  步驟 3a：本地開發（含 Mapbox，需原生編譯）
+  ─────────────────────────────────────────────
+    # 設定 Mapbox Download Token（每次新終端機需執行）
+    export RNMAPBOX_MAPS_DOWNLOAD_TOKEN=sk.eyJ1Ijoieour-token...   # macOS/Linux
+    $env:RNMAPBOX_MAPS_DOWNLOAD_TOKEN="sk.eyJ1..."                 # Windows PowerShell
+
+    # 清除並重新產生原生 Android 專案
+    npx expo prebuild --clean
+
+    # 在連接的 Android 裝置上執行
+    npx expo run:android --device
+
+    注意：@rnmapbox/maps 需要原生編譯，無法使用 Expo Go 直接掃 QR Code 執行。
+
+  步驟 3b：EAS 雲端 Build（推薦，不需本地 Android SDK）
+  ──────────────────────────────────────────────────────
+    # 登入 Expo 帳號
+    eas login
+
+    # Build 可直接安裝的 APK（preview profile）
+    eas build --platform android --profile preview
+
+    # Build 正式版 APK
+    eas build --platform android --profile production
+
+    # 完成後下載 APK，透過 adb 安裝
+    adb install build-xxxxx.apk
+
+  步驟 4：啟動 Expo Dev Server（不含 Mapbox 功能時可用）
+  ──────────────────────────────────────────────────────
+    npm start        # 或 npx expo start
+    npm run web      # Web 版本
+
+────────────────────────────────────────────────────────────────────────────────
+1-3. 後端（rns_app-core）建置流程
+────────────────────────────────────────────────────────────────────────────────
+
+  專案路徑：C:\dev\rns_app-core
+
+  步驟 1：安裝 Python 依賴
+  ─────────────────────────────
+    cd C:\dev\rns_app-core
+    pip install -r requirements.txt
+
+  步驟 2：確認 RNode 硬體連接
+  ─────────────────────────────
+    確認 LoRa RNode 已透過 USB 連接至電腦，
+    並記錄串列埠號（如 COM3 或 /dev/ttyUSB0）。
+
+  步驟 3：啟動後端服務
+  ─────────────────────────────
+    python -m rns_app
+
+    啟動後服務會：
+      - 監聽 0.0.0.0:5000
+      - 廣播 mDNS：rns-chat.local → 電腦 LAN IP
+
+    常用參數：
+      python -m rns_app --show-identity     # 顯示節點 Hash
+      python -m rns_app --show-destination  # 顯示 Destination Hash
+
+  步驟 4：確認 App 連線
+  ─────────────────────────────
+    手機連至與電腦相同的 Wi-Fi 或電腦熱點，
+    App 預設使用 http://rns-chat.local:5000 自動連線。
+    若 mDNS 解析失敗，到 j_settings（JSON Tab）手動輸入電腦 IP。
+
+────────────────────────────────────────────────────────────────────────────────
+1-4. 完整啟動清單
+────────────────────────────────────────────────────────────────────────────────
+
+  [ ] 1. 電腦插上 RNode（LoRa 硬體）
+  [ ] 2. 執行 python -m rns_app（後端服務啟動）
+  [ ] 3. 確認終端機顯示 mDNS published: rns-chat.local
+  [ ] 4. 手機連至電腦熱點或同一 Wi-Fi
+  [ ] 5. 開啟 Expolora App
+  [ ] 6. 進入 JSON Tab 確認 /status 有回應（若無則手動輸入 IP）
+  [ ] 7. 對方也執行相同步驟，雙方在 CONTACTS → Lobby 可看到彼此
+
+
+================================================================================
+二、輪詢機制與時序說明
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+2-1. 概覽
+────────────────────────────────────────────────────────────────────────────────
+
+  Expolora 採用 HTTP Polling（定時輪詢）而非 WebSocket 即時推播。
+  App 端主動定時向後端發送 GET 請求，拉取最新資料。
+
+  選擇 Polling 的原因：
+    - 後端（Flask）無 WebSocket 支援
+    - RNS 網路本身存在延遲，即時推播優勢有限
+    - 實作複雜度較低，適合 PoC 階段
+
+────────────────────────────────────────────────────────────────────────────────
+2-2. 所有輪詢來源與間隔
+────────────────────────────────────────────────────────────────────────────────
+
+  位置            間隔      目標 API                    說明
+  ─────────────   ──────    ──────────────────────────  ──────────────────────
+  MessagingContext  5,000ms  GET /getLobby              Lobby 節點清單
+  MessagingContext 10,000ms  GET /getGroups +           群組清單（後端+本地合併）
+                             GET /getGroupChat/{name}
+  index.tsx        4,000ms  GET /messages               一對一收訊輪詢
+  index.tsx        5,000ms  GET /getGroupChat/{name}    群組收訊輪詢
+  j_settings.tsx   5,000ms  GET /status                 後端節點狀態（可暫停）
+                             GET /identity
+                             GET /messages
+                             GET /getContactList
+                             GET /getBlocklist
+                             GET /getLobby
+
+────────────────────────────────────────────────────────────────────────────────
+2-3. MessagingContext 輪詢（全域）
+────────────────────────────────────────────────────────────────────────────────
+
+  Lobby 輪詢（5 秒）：
+  ─────────────────────
+    // app/context/MessagingContext.tsx
+    useEffect(() => {
+      fetchLobby();                              // 立即執行一次
+      const t = setInterval(fetchLobby, 5000);   // 之後每 5 秒
+      return () => clearInterval(t);             // 頁面卸載時清除
+    }, [fetchLobby]);
+
+    fetchLobby 邏輯：
+      GET /getLobby → 更新 lobbyPeers state
+      失敗時靜默（不顯示錯誤），保留上次結果
+
+  群組輪詢（10 秒）：
+  ─────────────────────
+    useEffect(() => {
+      refreshGroups();                              // 立即執行一次
+      const t = setInterval(refreshGroups, 10000);  // 之後每 10 秒
+      return () => clearInterval(t);
+    }, [refreshGroups]);
+
+    refreshGroups 邏輯（多步驟）：
+      Step 1: GET /getGroups          → 取後端已知群組名稱
+      Step 2: 讀 AsyncStorage         → 取本地已知群組名稱
+      Step 3: 合併去重                → 排除 pendingRemove 中的項目
+      Step 4: 對每個名稱呼叫 GET /getGroupChat/{name}
+              - 200 OK  → 取得 GroupRoom，加入顯示清單
+              - 404     → 確認已刪除，從 AsyncStorage 移除
+              - 網路錯誤 → 保留清單，本次不顯示
+
+────────────────────────────────────────────────────────────────────────────────
+2-4. index.tsx 收訊輪詢（聊天頁）
+────────────────────────────────────────────────────────────────────────────────
+
+  一對一收訊輪詢（4 秒）：
+  ─────────────────────────
+    // app/(tabs)/index.tsx
+    const POLL_INTERVAL_MS = 4000;
+
+    useEffect(() => {
+      const poll = async () => {
+        if (chatModeRef.current !== 'peer') return;  // 非一對一模式則跳過
+        const hash = selectedPeerRef.current;
+        if (!hash) return;
+        // ...
+        const res = await fetch(`${baseUrl}/messages`);
+        const lines: string[] = await res.json();
+        // 比對已知數量，只取新增部分
+        const state = chatStatesRef.current[key];
+        if (lines.length <= state.knownCount) return;  // 無新訊息則跳過
+        const newLines = lines.slice(state.knownCount);
+        // 過濾系統訊息前綴（[SYSTEM]、[OUT] 等），只顯示純文字
+      };
+      poll();
+      const t = setInterval(poll, POLL_INTERVAL_MS);
+      return () => clearInterval(t);
+    }, [baseUrl, applyMessages]);
+
+    關鍵設計：
+      - 使用 ref（chatModeRef、selectedPeerRef）讀取最新狀態，
+        避免 closure 閉包問題導致 interval 讀到舊值
+      - knownCount 追蹤已知訊息數，避免重複顯示
+
+  群組收訊輪詢（5 秒）：
+  ─────────────────────────
+    const GROUP_POLL_INTERVAL_MS = 5000;
+
+    useEffect(() => {
+      const poll = async () => {
+        if (chatModeRef.current !== 'group') return;  // 非群組模式則跳過
+        const groupName = selectedGroupRef.current;
+        if (!groupName) return;
+        const res = await fetch(`${baseUrl}/getGroupChat/${groupName}`);
+        const json = await res.json();
+        const rawMsgs = json?.data?.messages ?? [];
+        const selfName = json?.data?.group_room?.self_name;
+        // 依 status 與 from_name 判斷訊息方向（自己 / 他人）
+        const converted = rawMsgs.map(rawGroupMsgToIMessage).reverse();
+      };
+      poll();
+      const t = setInterval(poll, GROUP_POLL_INTERVAL_MS);
+      return () => clearInterval(t);
+    }, [baseUrl, applyMessages]);
+
+────────────────────────────────────────────────────────────────────────────────
+2-5. 時序圖（文字版）
+────────────────────────────────────────────────────────────────────────────────
+
+  時間軸（秒）
+  0    1    2    3    4    5    6    7    8    9    10
+  |    |    |    |    |    |    |    |    |    |    |
+  L--------------------L--------------------L--------  Lobby（5s）
+  G--------------------------------------------G-----  Groups（10s）
+  P-----------P-----------P-----------P-----------P-  一對一訊息（4s）
+  Q----------------Q----------------Q-----------Q---  群組訊息（5s）
+  D----------------D----------------D-----------D---  j_settings 診斷（5s）
+
+  說明：
+    L = GET /getLobby
+    G = GET /getGroups + GET /getGroupChat/{name} × n
+    P = GET /messages（僅一對一模式時執行）
+    Q = GET /getGroupChat/{name}（僅群組模式時執行）
+    D = j_settings 的 6 個端點（autoRefresh 開啟時）
+
+  並發注意事項：
+    - P 與 Q 不會同時執行（由 chatModeRef 互斥）
+    - D（j_settings）與 L/G（Context）會同時對後端發請求
+      最多同時 8 個並發請求（極端情況）
+
+
+================================================================================
+三、AsyncStorage 資料結構
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+3-1. 概覽
+────────────────────────────────────────────────────────────────────────────────
+
+  AsyncStorage 是 React Native 的 Key-Value 本地儲存，
+  資料以字串形式存放於裝置本地，App 重啟後仍保留。
+
+  Expolora 使用 3 個 Key，全部定義於 MessagingContext.tsx：
+
+    常數名稱              Key 字串              管理位置
+    ─────────────────     ──────────────────    ─────────────────────────────
+    STORAGE_KEY_HOST      "saved_host"          MessagingContext + j_settings
+    STORAGE_KEY_PORT      "saved_port"          MessagingContext + j_settings
+    STORAGE_KEY_GROUPS    "known_group_names"   MessagingContext
+
+────────────────────────────────────────────────────────────────────────────────
+3-2. saved_host
+────────────────────────────────────────────────────────────────────────────────
+
+  型別：    string
+  預設值：  "rns-chat.local"（未設定時的程式碼預設值）
+  範例值：  "rns-chat.local"  或  "192.168.1.5"
+
+  寫入時機：
+    1. j_settings 按下「套用」按鈕
+    2. MessagingContext 的 setHost() 被呼叫時自動寫入
+
+  讀取時機：
+    App 啟動時（MessagingContext 初始化 useEffect）：
+      const savedHost = await AsyncStorage.getItem('saved_host');
+      if (savedHost) setHostState(savedHost);
+
+  用途：
+    組合成 baseUrl = `http://${host}:${port}`，
+    作為所有 API 請求的基底 URL。
+
+────────────────────────────────────────────────────────────────────────────────
+3-3. saved_port
+────────────────────────────────────────────────────────────────────────────────
+
+  型別：    string（儲存時）→ number（讀取後轉換）
+  預設值：  5000
+  範例值：  "5000"
+
+  寫入時機：與 saved_host 相同（套用設定時一起寫入）
+
+  讀取時機：
+    const savedPort = await AsyncStorage.getItem('saved_port');
+    if (savedPort) setPortState(Number(savedPort));  // 轉為 number
+
+  注意：AsyncStorage 只能儲存字串，port 需轉型後使用。
+
+────────────────────────────────────────────────────────────────────────────────
+3-4. known_group_names
+────────────────────────────────────────────────────────────────────────────────
+
+  型別：    string（JSON 序列化的字串陣列）
+  預設值：  []（未設定時）
+  範例值：  '["my-team","field-ops","test-group"]'
+
+  讀取邏輯：
+    const raw = await AsyncStorage.getItem('known_group_names');
+    const names: string[] = raw ? JSON.parse(raw) : [];
+
+  寫入邏輯（去重後儲存）：
+    const unique = [...new Set(names)];
+    await AsyncStorage.setItem('known_group_names', JSON.stringify(unique));
+
+  寫入時機                操作              呼叫方
+  ─────────────────────   ──────────────    ──────────────────────────
+  新增群組或加入群組       registerGroup()   groups.tsx（建立/加入後）
+  從本地移除群組          unregisterGroup() groups.tsx（詳細 Modal 移除）
+  refreshGroups 發現 404  刪除該名稱        MessagingContext 自動清理
+  refreshGroups 合併後端  加入新名稱        MessagingContext 自動同步
+
+  pendingRemove 防護機制：
+    unregisterGroup 執行期間，refreshGroups 可能同時在跑。
+    為防止 refreshGroups 把「正在移除的群組」從後端拉回來，
+    使用 pendingRemoveRef（一個 Set<string>）標記移除中的項目：
+
+      const pendingRemoveRef = useRef<Set<string>>(new Set());
+
+      // unregisterGroup 執行時：
+      pendingRemoveRef.current.add(group_name);    // 標記
+      // ... 執行刪除 ...
+      pendingRemoveRef.current.delete(group_name); // 完成後移除標記
+
+      // refreshGroups 合併清單時過濾：
+      const merged = [...new Set([...localNames, ...backendNames])].filter(
+        n => !pendingRemoveRef.current.has(n)       // 排除正在移除的
+      );
+
+────────────────────────────────────────────────────────────────────────────────
+3-5. 完整資料流程圖
+────────────────────────────────────────────────────────────────────────────────
+
+  App 啟動
+    └─► 讀取 AsyncStorage
+          ├─ saved_host        → host state → baseUrl
+          ├─ saved_port        → port state → baseUrl
+          └─ known_group_names → refreshGroups() → 拉取各群組詳細 → groupRooms state
+
+  使用者在 j_settings 改 IP
+    └─► applySettings()
+          ├─ AsyncStorage.setItem('saved_host', newHost)
+          ├─ AsyncStorage.setItem('saved_port', newPort)
+          └─ setHost() / setPort() → 更新 Context → 所有 API 請求改用新位址
+
+  使用者在 groups 建立新群組
+    └─► POST /newGroup 成功
+          └─► registerGroup(group_name)
+                ├─ 讀 known_group_names
+                ├─ 加入新名稱
+                ├─ 寫回 AsyncStorage
+                └─ GET /getGroupChat/{name} → 更新 groupRooms state
+
+  使用者在 groups 移除群組
+    └─► unregisterGroup(group_name)
+          ├─ pendingRemoveRef.add(name)
+          ├─ 讀 known_group_names
+          ├─ 過濾掉該名稱
+          ├─ 寫回 AsyncStorage
+          ├─ 更新 groupRooms state（移除該項目）
+          └─ pendingRemoveRef.delete(name)
+
+================================================================================
+  文件版本：2026-05-09
+================================================================================

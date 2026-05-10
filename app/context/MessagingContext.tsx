@@ -16,9 +16,10 @@ const LOBBY_POLL_MS  = 5000;
 const GROUPS_POLL_MS = 10000;
 
 // AsyncStorage keys
-const STORAGE_KEY_HOST   = 'saved_host';
-const STORAGE_KEY_PORT   = 'saved_port';
-const STORAGE_KEY_GROUPS = 'known_group_names'; // string[] — 已知群組名稱清單
+const STORAGE_KEY_HOST            = 'saved_host';
+const STORAGE_KEY_PORT            = 'saved_port';
+const STORAGE_KEY_GROUPS          = 'known_group_names';    // string[] — 已知群組名稱清單
+const STORAGE_KEY_EXCLUDED_GROUPS = 'excluded_group_names'; // string[] — 永久排除（本地刪除）清單
 
 // ── 型別 ──────────────────────────────────────────────
 
@@ -63,6 +64,9 @@ type MessagingCtx = {
   setHost: (h: string) => void;
   setPort: (p: number) => void;
 
+  // 自身節點
+  selfDestHash: string | null;
+
   // Lobby
   firstPeer: LobbyPeer | null;
   lobbyPeers: LobbyPeer[];
@@ -92,6 +96,7 @@ const MessagingContext = createContext<MessagingCtx>({
   baseUrl: `http://${DEFAULT_HOST}:${DEFAULT_PORT}`,
   setHost: () => {},
   setPort: () => {},
+  selfDestHash: null,
   firstPeer: null,
   lobbyPeers: [],
   groupRooms: [],
@@ -113,6 +118,7 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
   const [lobbyPeers, setLobbyPeers]   = useState<LobbyPeer[]>([]);
   const [groupRooms, setGroupRooms]   = useState<GroupRoom[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
+  const [selfDestHash, setSelfDestHash] = useState<string | null>(null);
 
   // ref 供 interval callback 讀最新值，不需重建 interval
   const hostRef = useRef(host);
@@ -161,34 +167,71 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const saveKnownGroupNames = useCallback(async (names: string[]): Promise<void> => {
     try {
-      // 去重後儲存
       const unique = [...new Set(names)];
       await AsyncStorage.setItem(STORAGE_KEY_GROUPS, JSON.stringify(unique));
     } catch { /* ignore */ }
   }, []);
 
+  const loadExcludedGroupNames = useCallback(async (): Promise<Set<string>> => {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEY_EXCLUDED_GROUPS);
+      return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      return new Set();
+    }
+  }, []);
+
+  const addExcludedGroupName = useCallback(async (name: string): Promise<void> => {
+    try {
+      const excluded = await loadExcludedGroupNames();
+      excluded.add(name);
+      await AsyncStorage.setItem(STORAGE_KEY_EXCLUDED_GROUPS, JSON.stringify([...excluded]));
+    } catch { /* ignore */ }
+  }, [loadExcludedGroupNames]);
+
   // ── 抓取單一群組房間狀態 ─────────────────────────────
+  //
+  // 回傳值語意：
+  //   GroupRoom  → 成功取得
+  //   null       → 後端明確回傳 404（群組不存在，可從清單移除）
+  //   undefined  → 網路錯誤 / 後端暫時無法連線（保留在清單，下次再試）
 
   const fetchOneGroup = useCallback(
-    async (group_name: string): Promise<GroupRoom | null> => {
+    async (group_name: string): Promise<GroupRoom | null | undefined> => {
       try {
         const res = await fetch(
           `http://${hostRef.current}:${portRef.current}/getGroupChat/${group_name}`,
           { headers: { Accept: 'application/json' } }
         );
-        if (!res.ok) return null;
+        if (res.status === 404) return null;   // 群組確實不存在
+        if (!res.ok) return undefined;         // 其他 HTTP 錯誤，保守保留
         const json = await res.json();
-        // 後端回傳 data.group_room，包含 group_name / self_name / join_confirm
-        // members 目前後端不在 group_room 內，若後端有補上則自動帶入
         return (json?.data?.group_room as GroupRoom) ?? null;
       } catch {
-        return null;
+        return undefined;                      // 網路錯誤，保留群組
       }
     },
     []
   );
 
-  // ── refreshGroups：依 AsyncStorage 清單逐一抓取 ──────
+  // ── fetchAllGroupsFromBackend：從後端取得所有已知群組名稱 ──
+
+  const fetchAllGroupsFromBackend = useCallback(async (): Promise<string[]> => {
+    try {
+      const res = await fetch(
+        `http://${hostRef.current}:${portRef.current}/getGroups`,
+        { headers: { Accept: 'application/json' } }
+      );
+      if (!res.ok) return [];
+      const json = await res.json();
+      const groups: GroupRoom[] = json?.data?.groups ?? [];
+      return groups.map(g => g.group_name).filter(Boolean);
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // ── refreshGroups：合併後端清單 + AsyncStorage 清單後逐一抓取 ──
 
   // 防止 unregisterGroup 執行中時 refreshGroups 把群組復原
   const pendingRemoveRef = useRef<Set<string>>(new Set());
@@ -196,58 +239,107 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
   const refreshGroups = useCallback(async () => {
     setGroupsLoading(true);
     try {
-      const names = await loadKnownGroupNames();
-      const filteredNames = names.filter(n => !pendingRemoveRef.current.has(n));
-      if (filteredNames.length === 0) {
+      // Step 1：從後端取得所有已知群組名稱（/getGroups），合併到 AsyncStorage
+      const [backendNames, localNames, excluded] = await Promise.all([
+        fetchAllGroupsFromBackend(),
+        loadKnownGroupNames(),
+        loadExcludedGroupNames(),
+      ]);
+      const merged = [...new Set([...localNames, ...backendNames])].filter(
+        n => !pendingRemoveRef.current.has(n) && !excluded.has(n)
+      );
+      if (merged.length !== localNames.length) {
+        await saveKnownGroupNames(merged);
+      }
+
+      if (merged.length === 0) {
         setGroupRooms([]);
         return;
       }
-      const results = await Promise.all(filteredNames.map(fetchOneGroup));
-      const valid = results.filter((r): r is GroupRoom => r !== null);
-      const survivingNames = filteredNames.filter((_, i) => results[i] !== null);
-      if (survivingNames.length !== filteredNames.length) {
+
+      // Step 2：逐一抓取詳細狀態
+      const results = await Promise.all(merged.map(fetchOneGroup));
+
+      // null  → 後端確認 404，從清單移除
+      // undefined → 網路錯誤，保留清單但不顯示
+      const valid         = results.filter((r): r is GroupRoom => r != null);
+      const survivingNames = merged.filter((_, i) => results[i] !== null); // 保留 undefined（網路錯誤）
+      if (survivingNames.length !== merged.length) {
         await saveKnownGroupNames(survivingNames);
       }
       setGroupRooms(valid);
     } finally {
       setGroupsLoading(false);
     }
-  }, [loadKnownGroupNames, fetchOneGroup, saveKnownGroupNames]);
+  }, [loadKnownGroupNames, fetchOneGroup, fetchAllGroupsFromBackend, saveKnownGroupNames, loadExcludedGroupNames]);
 
   // ── registerGroup：新增群組到已知清單並立即載入 ──────
 
   const registerGroup = useCallback(
     async (group_name: string) => {
+      // 從排除清單移除（允許重新加入之前刪除的群組）
+      try {
+        const excluded = await loadExcludedGroupNames();
+        if (excluded.has(group_name)) {
+          excluded.delete(group_name);
+          await AsyncStorage.setItem(STORAGE_KEY_EXCLUDED_GROUPS, JSON.stringify([...excluded]));
+        }
+      } catch { /* ignore */ }
+
       const names = await loadKnownGroupNames();
       if (!names.includes(group_name)) {
         await saveKnownGroupNames([...names, group_name]);
       }
       const room = await fetchOneGroup(group_name);
-      if (room) {
+      if (room != null) {
         setGroupRooms(prev => {
           const others = prev.filter(r => r.group_name !== group_name);
           return [...others, room];
         });
       }
     },
-    [loadKnownGroupNames, saveKnownGroupNames, fetchOneGroup]
+    [loadKnownGroupNames, saveKnownGroupNames, fetchOneGroup, loadExcludedGroupNames]
   );
 
   // ── unregisterGroup：從已知清單移除 ─────────────────
 
   const unregisterGroup = useCallback(
     async (group_name: string) => {
-      pendingRemoveRef.current.add(group_name);     // ← 標記移除中
+      pendingRemoveRef.current.add(group_name);
       try {
-        const names = await loadKnownGroupNames();
-        await saveKnownGroupNames(names.filter(n => n !== group_name));
+        await Promise.all([
+          addExcludedGroupName(group_name),
+          loadKnownGroupNames().then(names =>
+            saveKnownGroupNames(names.filter(n => n !== group_name))
+          ),
+        ]);
         setGroupRooms(prev => prev.filter(r => r.group_name !== group_name));
       } finally {
-        pendingRemoveRef.current.delete(group_name); // ← 移除完成
+        pendingRemoveRef.current.delete(group_name);
       }
     },
-    [loadKnownGroupNames, saveKnownGroupNames]
+    [loadKnownGroupNames, saveKnownGroupNames, addExcludedGroupName]
   );
+
+  // ── 取得自身節點 hash（只在連線設定變更時抓一次）───────
+
+  const fetchIdentity = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `http://${hostRef.current}:${portRef.current}/identity`,
+        { headers: { Accept: 'application/json' } }
+      );
+      if (!res.ok) return;
+      const json = await res.json();
+      const hash: string | undefined =
+        json?.data?.destination_in?.hash ?? json?.destination_in?.hash;
+      if (hash) setSelfDestHash(hash);
+    } catch { /* 靜默失敗 */ }
+  }, []);
+
+  useEffect(() => {
+    fetchIdentity();
+  }, [fetchIdentity, host, port]);
 
   // ── Lobby 輪詢 ───────────────────────────────────────
 
@@ -290,6 +382,7 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
         baseUrl,
         setHost,
         setPort,
+        selfDestHash,
         firstPeer,
         lobbyPeers,
         groupRooms,

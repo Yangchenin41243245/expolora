@@ -1,0 +1,316 @@
+================================================================================
+  Expolora — 第三方模組與 APK Build 服務
+================================================================================
+
+目錄
+────
+1. 核心框架
+2. 導覽與路由
+3. UI 元件與互動
+4. 地圖與定位
+5. 資料持久化
+6. 工具與平台支援
+7. 開發工具（devDependencies）
+8. APK Build 服務（EAS Build）
+9. app.json 插件設定
+10. Build 指令速查
+
+
+================================================================================
+1. 核心框架
+================================================================================
+
+  套件                  版本        說明
+  ──────────────────    ─────────   ───────────────────────────────────────────
+  react                 19.1.0      React 核心，啟用 React Compiler 最佳化
+  react-native          0.81.5      跨平台原生 App 框架（iOS / Android / Web）
+  expo                  ~54.0.33    Expo SDK，統一管理原生模組與 build 工具鏈
+  expo-router           ~6.0.23     檔案即路由系統，進入點為 expo-router/entry
+
+  說明：
+  - app.json 啟用 "newArchEnabled": true，使用 React Native 新架構（JSI / Fabric）
+  - app.json 啟用 "reactCompiler": true，由 React Compiler 自動處理 memoization
+
+
+================================================================================
+2. 導覽與路由
+================================================================================
+
+  套件                         版本        說明
+  ──────────────────────────   ─────────   ──────────────────────────────────
+  expo-router                  ~6.0.23     檔案即路由（_layout.tsx / Tabs / Stack）
+  @react-navigation/native     ^7.1.33     React Navigation 核心（expo-router 底層）
+  @react-navigation/native-stack ^7.14.4   Native Stack 導覽器（硬體加速）
+  @react-navigation/bottom-tabs  ^7.15.5   底部 Tab 導覽器
+  @react-navigation/elements    ^2.6.3     共用 UI 元素（Header 等）
+  react-native-screens          ~4.16.0    原生 Screen 容器（效能最佳化）
+  react-native-safe-area-context ~5.6.0    安全區域（瀏海、底部 Home Bar）處理
+
+  使用方式：
+  - app/_layout.tsx 使用 expo-router 的 <Stack>
+  - app/(tabs)/_layout.tsx 使用 expo-router 的 <Tabs>
+  - 所有頁面切換、Modal push 均由 expo-router 自動處理
+
+
+================================================================================
+3. UI 元件與互動
+================================================================================
+
+  套件                         版本        說明
+  ──────────────────────────   ─────────   ──────────────────────────────────
+  react-native-gifted-chat     ^3.3.2      聊天 UI 框架（GiftedChat、Bubble、Send 等）
+  @expo/vector-icons           ^15.0.3     圖示庫（Ionicons 等，含 Ionicons name="send"）
+  expo-symbols                 ~1.0.8      SF Symbols 支援（iOS 原生圖示）
+  react-native-element-dropdown ^2.12.4   下拉選單元件（聯絡人/群組選擇）
+  react-native-gesture-handler ~2.28.0    手勢識別（滑動、拖動）
+  react-native-reanimated      ~4.1.1     宣告式動畫引擎
+  react-native-worklets        0.5.1      Reanimated 所需 JS worklet 執行環境
+  react-native-keyboard-controller 1.18.5 鍵盤高度追蹤與 KeyboardAvoidingView 增強
+  expo-haptics                 ~15.0.8    觸覺回饋（Tab 切換震動）
+
+  GiftedChat 使用方式（index.tsx）：
+    <GiftedChat
+      messages={messages}
+      onSend={onSend}
+      user={{ _id: 1 }}
+      renderBubble={renderBubble}
+      renderInputToolbar={renderInputToolbar}
+      renderSend={renderSend}
+      renderSystemMessage={renderSystemMessage}
+    />
+
+  Ionicons 使用方式：
+    import { Ionicons } from '@expo/vector-icons';
+    <Ionicons name="send" size={24} color="#00C853" />
+    <Ionicons name="location-sharp" size={28} color="#FF5252" />
+
+
+================================================================================
+4. 地圖與定位
+================================================================================
+
+  套件               版本        說明
+  ─────────────────  ─────────   ──────────────────────────────────────────────
+  @rnmapbox/maps     ^10.3.0     Mapbox 地圖 SDK（地圖渲染、離線磚下載）
+  expo-location      ~19.0.8     GPS 定位（foreground 權限請求與座標取得）
+
+  注意：@rnmapbox/maps 需要原生編譯，無法在 Expo Go 執行，需使用 EAS Build。
+
+  Mapbox 初始化（components/LocationMessageBubble.tsx）：
+    import MapboxGL from '@rnmapbox/maps';
+    MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '');
+
+  Mapbox Token 設定：
+    在 .env 加入：EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=pk.eyJ1Ijoieour-token...
+    （參考 .env.example）
+
+  Android 特別需求：
+    Mapbox Android SDK 需要 Mapbox 下載 Token（與存取 Token 不同）
+    設定位置：android/gradle.properties 或環境變數 MAPBOX_DOWNLOAD_TOKEN
+
+  GPS 定位使用方式（utils/location.ts）：
+    import * as Location from 'expo-location';
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    const loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+
+  Android 定位權限（app.json）：
+    "permissions": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION"
+    ]
+
+  iOS 定位權限說明（app.json plugin）：
+    "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location..."
+
+
+================================================================================
+5. 資料持久化
+================================================================================
+
+  套件                                  版本    說明
+  ────────────────────────────────────  ──────  ──────────────────────────────
+  @react-native-async-storage/async-storage  2.2.0  Key-Value 本地儲存
+
+  用途與 Key 一覽：
+    Key                  使用位置              說明
+    ─────────────────    ───────────────────   ──────────────────────────────
+    "saved_host"         MessagingContext       後端主機位址
+    "saved_port"         MessagingContext       後端 Port
+    "known_group_names"  MessagingContext       已知群組名稱陣列（JSON 字串）
+
+  使用方式（MessagingContext.tsx）：
+    import AsyncStorage from '@react-native-async-storage/async-storage';
+
+    // 讀取
+    const savedHost = await AsyncStorage.getItem('saved_host');
+
+    // 寫入
+    await AsyncStorage.setItem('saved_host', 'rns-chat.local');
+
+    // 讀取 JSON 陣列
+    const raw = await AsyncStorage.getItem('known_group_names');
+    const names: string[] = raw ? JSON.parse(raw) : [];
+
+
+================================================================================
+6. 工具與平台支援
+================================================================================
+
+  套件                    版本        說明
+  ─────────────────────   ─────────   ──────────────────────────────────────
+  expo-build-properties   ~1.0.10     原生 build 設定（cleartext、buildArchs）
+  expo-constants          ~18.0.13    存取 app.json extra、版本號等常數
+  expo-font               ~14.0.11    字型載入（Expo Splash Screen 前置準備）
+  expo-image              ~3.0.11     高效能圖片元件（替代 react-native Image）
+  expo-linking            ~8.0.11     Deep Link / URL Scheme 處理
+  expo-splash-screen      ~31.0.13    啟動畫面控制（延遲隱藏至資源載入完成）
+  expo-status-bar         ~3.0.9      狀態列樣式控制（dark/light-content）
+  expo-system-ui          ~6.0.9      系統 UI 顏色設定（Android edge-to-edge）
+  expo-updates            ~29.0.16    OTA（空中下載）更新支援
+  expo-web-browser        ~15.0.10    在 App 內開啟外部網頁
+  react-dom               19.1.0      Web 平台 React DOM（expo start --web 用）
+  react-native-web        ~0.21.0     React Native 元件的 Web 實作
+  react-native-webview    13.15.0     內嵌 WebView 元件
+
+  expo-build-properties 設定（app.json）：
+    // 允許 HTTP 明文流量（開發環境連接本地後端）
+    { "android": { "usesCleartextTraffic": true } }
+
+    // 限定 Android 建置架構（減小 APK 體積）
+    { "android": { "buildArchs": ["arm64-v8a"] } }
+
+  expo-updates OTA 設定（app.json）：
+    "runtimeVersion": { "policy": "appVersion" }
+    "updates": { "url": "https://u.expo.dev/92896463-d4f8-4f51-9ebb-f63ab6cf2524" }
+
+
+================================================================================
+7. 開發工具（devDependencies）
+================================================================================
+
+  套件                  版本      說明
+  ──────────────────    ────────  ──────────────────────────────────────────
+  typescript            ~5.9.2    TypeScript 編譯器
+  @types/react          ~19.1.0   React TypeScript 型別定義
+  eslint                ^9.25.0   程式碼靜態分析
+  eslint-config-expo    ~10.0.0   Expo 官方 ESLint 規則集
+
+  tsconfig.json 路徑別名：
+    "@/*" → "./"    （例如 import { Colors } from '@/constants/theme'）
+
+
+================================================================================
+8. APK Build 服務（EAS Build）
+================================================================================
+
+EAS（Expo Application Services）是 Expo 提供的雲端 Build 服務，
+可在 Expo 的伺服器上編譯原生 Android APK，不需本地安裝 Android SDK。
+
+設定檔：eas.json
+  {
+    "cli": {
+      "version": ">= 18.3.0",
+      "appVersionSource": "remote"     // 版本號由 EAS 雲端管理
+    },
+    "build": {
+      "development": {
+        "developmentClient": true,     // 安裝 expo-dev-client，支援熱更新
+        "distribution": "internal"     // 內部發佈（不上架商店）
+      },
+      "preview": {
+        "distribution": "internal",
+        "android": {
+          "buildType": "apk"           // 直接安裝的 APK 格式
+        }
+      },
+      "production": {
+        "autoIncrement": true,         // 自動遞增版本號
+        "android": {
+          "buildType": "apk"
+        }
+      }
+    }
+  }
+
+三種 Build Profile：
+
+  Profile       用途                          產出格式   發佈管道
+  ──────────    ──────────────────────────    ────────   ────────
+  development   開發期間使用，含 Dev Menu       APK        內部
+  preview       QA 測試用，可直接安裝           APK        內部
+  production    正式版本，支援 OTA 更新         APK        內部（未設 Play Store）
+
+EAS Project ID（app.json）：
+  "extra": {
+    "eas": { "projectId": "92896463-d4f8-4f51-9ebb-f63ab6cf2524" }
+  }
+
+Android App 資訊（app.json）：
+  Package Name：com.hizaku.expolora
+  Owner：       rns-team
+  Bundle ID：   com.hizaku.expolora（iOS）
+
+Android 圖示設定（Adaptive Icon）：
+  foregroundImage：./assets/images/android-icon-foreground.png
+  backgroundImage：./assets/images/android-icon-background.png
+  monochromeImage：./assets/images/android-icon-monochrome.png
+  backgroundColor：#E6F4FE
+
+Android 特殊設定（app.json）：
+  "edgeToEdgeEnabled": true              // 全螢幕 edge-to-edge 顯示
+  "predictiveBackGestureEnabled": false  // 停用 Android 13+ 預測性返回手勢
+  "buildArchs": ["arm64-v8a"]            // 只編譯 64 位元版本（縮小 APK）
+  "usesCleartextTraffic": true           // 允許 HTTP 連線（連接本地後端）
+
+
+================================================================================
+9. app.json 插件設定
+================================================================================
+
+  插件                    說明
+  ────────────────────    ──────────────────────────────────────────────────
+  expo-router             啟用檔案即路由系統
+  expo-splash-screen      啟動畫面設定（圖片、背景色、dark mode 支援）
+  expo-web-browser        允許在 App 內開啟外部網頁
+  expo-build-properties   設定原生 build 參數（cleartext、buildArchs）
+  @rnmapbox/maps          注入 Mapbox Android build 設定（自動處理 gradle）
+  expo-location           注入 iOS 定位權限說明字串
+
+  expo-splash-screen 設定：
+    "image": "./assets/images/splash-icon.png"
+    "imageWidth": 200
+    "resizeMode": "contain"
+    "backgroundColor": "#ffffff"  // 淺色模式
+    "dark": { "backgroundColor": "#000000" }  // 深色模式
+
+
+================================================================================
+10. Build 指令速查
+================================================================================
+
+本地開發：
+  npm start              # 啟動 Expo Dev Server（Expo Go 可用的功能）
+  npm run android        # 本地 Android 編譯（需 Android SDK）
+  npm run web            # 啟動 Web 版本
+  npm run lint           # ESLint 檢查
+
+EAS 雲端 Build（需登入 Expo 帳號）：
+  eas build --platform android --profile preview      # 輸出可安裝 APK
+  eas build --platform android --profile production   # 正式版 APK
+  eas build --platform android --profile development  # 開發版（含 Dev Menu）
+
+安裝 APK（透過 adb）：
+  adb install build-*.apk
+
+EAS Update（OTA 空中更新，不需重新 Build）：
+  eas update --branch production --message "fix: ..."
+
+查看 Build 狀態：
+  eas build:list
+
+================================================================================
+  文件版本：2026-05-09
+  Expo SDK：54  /  EAS CLI：>= 18.3.0
+================================================================================
