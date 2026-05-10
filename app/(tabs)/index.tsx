@@ -18,12 +18,13 @@ import {
   GiftedChat,
   IMessage,
   InputToolbar,
+  MessageText,
   Send,
   SystemMessage,
 } from 'react-native-gifted-chat';
 
 import LocationMessageBubble from '../../components/LocationMessageBubble';
-import type { LocationMessage } from '../../types/chat';
+import type { LocationMessage, LocationPayload } from '../../types/chat';
 import { getCurrentLocation } from '../../utils/location';
 import { useMessaging } from '../context/MessagingContext';
 
@@ -64,21 +65,83 @@ type RawGroupMsg = {
   timestamp?: number;
 };
 
+type RawPeerMsg = {
+  _id?: string;
+  message_id?: string;
+  text?: unknown;
+  content?: unknown;
+  message?: unknown;
+  sender?: string;
+  status?: string;
+  timestamp?: number;
+  createdAt?: string | number;
+};
+
 // ── 工具函式 ──────────────────────────────────────────────────────────────────
 
 const shortHash = (h: string) => (h ? `${h.slice(0, 8)}…` : '—');
+
+const LOCATION_MESSAGE_RE =
+  /(?:📍\s*)?Location:\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/i;
+
+const parseLocationMessage = (text: string): LocationPayload | undefined => {
+  const match = text.match(LOCATION_MESSAGE_RE);
+  if (!match) return undefined;
+
+  const latitude = Number(match[1]);
+  const longitude = Number(match[2]);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return undefined;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return undefined;
+
+  return { latitude, longitude };
+};
+
+const withLocationPayload = <T extends LocationMessage>(message: T): T => {
+  const location = parseLocationMessage(message.text);
+  return location ? { ...message, location } : message;
+};
+
+const rawPeerMsgText = (raw: unknown): string => {
+  if (typeof raw === 'string') return raw;
+  if (typeof raw !== 'object' || raw === null) return JSON.stringify(raw) ?? String(raw);
+
+  const m = raw as RawPeerMsg;
+  const text = m.text ?? m.content ?? m.message;
+  return typeof text === 'string' ? text : JSON.stringify(raw) ?? String(raw);
+};
+
+const rawPeerMsgToIMessage = (
+  raw: unknown,
+  idx: number,
+  knownCount: number,
+): LocationMessage => {
+  const m = typeof raw === 'object' && raw !== null ? (raw as RawPeerMsg) : null;
+  const text = rawPeerMsgText(raw).trim();
+  const createdAt = m?.timestamp
+    ? new Date(m.timestamp * 1000)
+    : m?.createdAt
+      ? new Date(m.createdAt)
+      : new Date();
+
+  return withLocationPayload({
+    _id: m?._id ?? m?.message_id ?? `recv_${knownCount + idx}_${text.slice(0, 16)}`,
+    text,
+    createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt,
+    user: { _id: BOT_USER_ID, name: m?.sender ?? 'Peer' },
+  });
+};
 
 const rawGroupMsgToIMessage = (
   m: RawGroupMsg,
   idx: number,
   selfName?: string,
-): IMessage => {
+): LocationMessage => {
   const isSystem = m.message_type === 'GROUP_SYSTEM' || m.message_type === 'GROUP_INVITE';
   const isSelf =
     m.status === 'delivered' ||
     (!!selfName && !!m.from_name && m.from_name === selfName);
 
-  return {
+  return withLocationPayload({
     _id:       m.message_id ?? `grp_${idx}_${m.timestamp ?? idx}`,
     text:      m.content ?? '',
     createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
@@ -89,7 +152,7 @@ const rawGroupMsgToIMessage = (
           _id:  isSelf ? MY_USER_ID : BOT_USER_ID,
           name: m.from_name ?? 'Member',
         },
-  };
+  });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -196,18 +259,13 @@ export default function ChatScreen() {
         if (!res.ok) return;
         const json: unknown = await res.json();
         if (!Array.isArray(json)) return;
-        const lines: string[] = json.map(i => (typeof i === 'string' ? i : JSON.stringify(i)));
+        const lines = json.map(rawPeerMsgText);
         const state = chatStatesRef.current[key] ?? { messages: [], knownCount: 0 };
         if (lines.length <= state.knownCount) return;
-        const newLines = lines.slice(state.knownCount);
-        const incoming: IMessage[] = newLines
-          .filter(l => !isSystemLine(l))
-          .map((l, i) => ({
-            _id: `recv_${state.knownCount + i}_${l.slice(0, 16)}`,
-            text: l.trim(),
-            createdAt: new Date(),
-            user: { _id: BOT_USER_ID, name: 'Peer' },
-          }));
+        const incoming: LocationMessage[] = json
+          .slice(state.knownCount)
+          .filter(raw => !isSystemLine(rawPeerMsgText(raw)))
+          .map((raw, i) => rawPeerMsgToIMessage(raw, i, state.knownCount));
         const updated = incoming.length > 0
           ? GiftedChat.append(state.messages, incoming)
           : state.messages;
@@ -363,6 +421,12 @@ export default function ChatScreen() {
     const msg = props.currentMessage as LocationMessage;
     if (!msg?.location) return null;
     return <LocationMessageBubble currentMessage={msg} />;
+  };
+
+  const renderMessageText = (props: any) => {
+    const msg = props.currentMessage as LocationMessage;
+    if (msg?.location) return null;
+    return <MessageText {...props} />;
   };
 
   const renderActions = (props: any) => {
@@ -621,6 +685,7 @@ export default function ChatScreen() {
           user={{ _id: MY_USER_ID }}
           renderBubble={renderBubble}
           renderSystemMessage={renderSystemMessage}
+          renderMessageText={renderMessageText}
           renderInputToolbar={renderInputToolbar}
           renderSend={renderSend}
           renderCustomView={renderCustomView}

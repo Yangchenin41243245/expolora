@@ -13,6 +13,13 @@ export const LOCATION_MAP_ZOOM = 14;
 /** Pixel dimensions for the mini-map rendered inside a chat bubble */
 export const LOCATION_MAP_SIZE = { width: 220, height: 150 };
 
+/** Fixed first-launch offline cache seed: 23.706375, 120.430419 with a 2 km radius */
+export const INITIAL_OFFLINE_MAP_CENTER = {
+  latitude: 23.706375,
+  longitude: 120.430419,
+};
+export const INITIAL_OFFLINE_MAP_RADIUS_KM = 2;
+
 /**
  * Bounding-box offset (in degrees) for offline tile pack downloads.
  * ~0.01° ≈ 1.1 km — downloads a ~2.2 km square around each shared location.
