@@ -243,42 +243,48 @@ export default function GroupsScreen() {
   return (
     <View style={styles.container}>
 
-      {/* 頂部 Bar */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>群組</Text>
-          <View style={styles.headerCountChip}>
-            <Text style={styles.headerCountText}>{groupRooms.length}</Text>
-          </View>
-        </View>
-        <View style={styles.headerRight}>
-          {lastRefresh && (
-            <Text style={styles.headerTime}>{lastRefresh.toLocaleTimeString('zh-TW')}</Text>
-          )}
-          <TouchableOpacity
-            style={styles.headerIconBtn}
-            onPress={handleRefresh}
-            disabled={groupsLoading}
-          >
-            {groupsLoading
-              ? <ActivityIndicator size="small" color={C.accent} />
-              : <Text style={styles.headerIcon}>↻</Text>
-            }
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerJoinBtn}
-            onPress={() => setScene({ type: 'join' })}
-          >
-            <Text style={styles.headerJoinText}>加入</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerCreateBtn}
-            onPress={() => setScene({ type: 'create' })}
-          >
-            <Text style={styles.headerCreateText}>＋ 新建</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      {/* 原頂部 Bar 已移至 Tabs Header */}
+      <Tabs.Screen
+        options={{
+          headerTitle: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold' }}>群組</Text>
+              <View style={styles.headerCountChip}>
+                <Text style={styles.headerCountText}>{groupRooms.length}</Text>
+              </View>
+            </View>
+          ),
+          headerRight: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 15, gap: 10 }}>
+              {lastRefresh && (
+                <Text style={styles.headerTime}>{lastRefresh.toLocaleTimeString('zh-TW')}</Text>
+              )}
+              <TouchableOpacity
+                style={styles.headerIconBtn}
+                onPress={handleRefresh}
+                disabled={groupsLoading}
+              >
+                {groupsLoading
+                  ? <ActivityIndicator size="small" color={C.accent} />
+                  : <Text style={styles.headerIcon}>↻</Text>
+                }
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.headerJoinBtn}
+                onPress={() => setScene({ type: 'join' })}
+              >
+                <Text style={styles.headerJoinText}>加入</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.headerCreateBtn}
+                onPress={() => setScene({ type: 'create' })}
+              >
+                <Text style={styles.headerCreateText}>＋ 新建</Text>
+              </TouchableOpacity>
+            </View>
+          ),
+        }}
+      />
 
       {/* 群組清單 */}
       <View style={{ flex: 1 }}>
@@ -981,7 +987,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.border, borderRadius: 8,
     paddingHorizontal: 10, paddingVertical: 6,
   },
-  headerJoinText: { color: C.textDim, fontSize: 12, fontFamily: 'monospace' },
+  headerJoinText: { color: '#000', fontSize: 12, fontFamily: 'monospace' },
   headerCreateBtn: {
     backgroundColor: C.accentDim, borderRadius: 8,
     paddingHorizontal: 12, paddingVertical: 6,

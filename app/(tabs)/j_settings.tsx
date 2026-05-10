@@ -315,6 +315,7 @@ const j_settings: React.FC = () => {
           {/* ── 內容區 ── */}
           <ScrollView
             style={styles.content}
+            contentContainerStyle={styles.contentContainer}
             refreshControl={
               <RefreshControl refreshing={current.loading} onRefresh={() => fetchEndpoint(activeEndpoint)} />
             }
@@ -443,7 +444,7 @@ const GroupDebugPanel: React.FC<GroupDebugPanelProps> = ({ state, onNameChange, 
     </View>
 
     {/* 結果區 */}
-    <ScrollView style={styles.content}>
+    <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
       {state.error ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorTitle}>⚠ 查詢失敗</Text>
@@ -584,6 +585,7 @@ const styles = StyleSheet.create({
   statusText: { color: '#555', fontSize: 11 },
   refreshBtn: { color: '#4a90e2', fontSize: 14 },
   content: { flex: 1, padding: 12 },
+  contentContainer: { paddingBottom: 80 },
   emptyText: { color: '#555', textAlign: 'center', marginTop: 40 },
   errorBox: {
     backgroundColor: '#2a1515', borderRadius: 8, padding: 16,
