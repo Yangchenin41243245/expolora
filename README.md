@@ -1,73 +1,207 @@
-# 這是測試用的branch，用於測試fork並修改後的後端，會在之後視情況刪除。
+# expolora
 
-在下一版後端出來之前暫時作為硬體驗證與先行展示用
-[`適用的後端連結`](https://github.com/Yangchenin41243245/rns_app-core/tree/master)
+Expo / React Native frontend for the RNS mesh chat system. Connects to a
+[rns_app-core](../rns_app-core) Flask backend over local Wi-Fi and provides
+peer discovery, direct messaging, and group chat via Reticulum Network Stack.
 
-[`APK檔`](https://drive.google.com/file/d/1ZkovEexajP7kKuZAnDjT9gmdpV01uyLQ/view?usp=drive_link)
-## Get started
+## Quick Start
 
-1. Install dependencies
+### Prerequisites
 
-   ```bash
-   npm install
-   ```
+- Node.js 18+
+- pnpm (or npm)
+- Expo CLI (`npm install -g expo-cli`)
+- Android device or emulator (native features require Android/iOS)
+- A running `rns_app-core` backend on the same network
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+### Install and Run
 
 ```bash
-npm run reset-project
+# in c:\dev\expolora
+pnpm install          # or npm install
+pnpm start            # starts Metro bundler
+pnpm android          # build & launch on Android
+pnpm web              # start web dev server (limited — no offline maps)
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### Configure Backend Host
 
-## Mapbox & Location Sharing
+On first launch the app connects to `rns-chat.local:5000` (mDNS name for the
+Linux/macOS backend machine). To point at a different host:
 
-This project integrates Mapbox and location-sharing features, which require a **Custom Native Build**. Standard Expo Go cannot be used.
+1. Open the **JSON / Settings** tab in the app.
+2. Enter the backend's IP address (e.g. `192.168.1.102`) and port.
+3. Tap **套用** (Apply). The setting persists across restarts.
 
-### Build and Test (Android)
+> **Windows backend**: use the machine's LAN IP, not `rns-chat.local`. mDNS
+> `.local` resolution is unreliable on Windows clients.
 
-To build and run the app for Android, you must provide your Mapbox download token:
+---
 
-```bash
-# Set your Mapbox Secret Token (starts with sk.)
-export RNMAPBOX_MAPS_DOWNLOAD_TOKEN=your_token_here
+## Architecture
 
-# Clean and rebuild the native project
-npx expo prebuild --clean
-
-# Run the app on an Android device or emulator
-npx expo run:android --device
+```
+┌─────────────────────────────────┐
+│   expolora (Expo React Native)  │
+│                                 │
+│  MessagingContext               │   HTTP polling
+│   ├─ /getLobby   (5 s)  ───────────────────────► rns_app-core
+│   ├─ /getGroups  (10 s) ───────────────────────► Flask :5000
+│   └─ /identity   (once) ───────────────────────►
+│                                 │
+│  Tabs                           │
+│   ├─ index      — peer chat     │
+│   ├─ contacts   — contact list  │
+│   ├─ groups     — group rooms   │
+│   ├─ identity   — chat history  │
+│   └─ j_settings — debug / config│
+└─────────────────────────────────┘
 ```
 
-> **Note:** The `RNMAPBOX_MAPS_DOWNLOAD_TOKEN` is required by the Mapbox SDK to download native dependencies during the build process.
+State is managed through a single React Context (`MessagingContext`). All
+screens share lobby peers, group rooms, and connection settings through it.
+There is no local state management library — everything is `useState` /
+`useEffect` inside the provider.
 
-## Learn more
+---
 
-To learn more about developing your project with Expo, look at the following resources:
+## File Structure
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```
+app/
+  _layout.tsx            Root layout; triggers offline map pre-download on native
+  (tabs)/
+    _layout.tsx          Tab bar definition
+    index.tsx            1-on-1 peer chat (lobby → message flow)
+    contacts.tsx         Saved contact list
+    groups.tsx           Group room list and group chat
+    identity.tsx         Chat history viewer / clearer
+    j_settings.tsx       Debug panel, host/port config, test message sender
+  context/
+    MessagingContext.tsx  Global state: lobby, groups, host/port, identity hash
 
-## Join the community
+constants/
+  mapbox.ts              Mapbox token, style URL, offline pack configuration
+  theme.ts               Shared colour tokens
 
-Join our community of developers creating universal apps.
+utils/
+  location.ts            GPS + Mapbox offline tile management (native)
+  location.web.ts        Web stub — no-op for offline tiles, uses expo-location
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### Platform-Specific Files
+
+Metro automatically selects `*.web.ts` over `*.ts` for web builds. This is used
+to exclude `@rnmapbox/maps` (native-only) from the web bundle:
+
+| File | Platform |
+|------|----------|
+| `utils/location.ts` | Android / iOS |
+| `utils/location.web.ts` | Web (no-op offline tiles) |
+
+---
+
+## Key Concepts
+
+### Lobby
+
+`GET /getLobby` returns active RNS peers that have announced themselves and
+established a link. The app polls every 5 seconds. The backend filters out the
+node's own `dest_hash` before returning results; the frontend also filters
+`selfDestHash` received from `/identity` as a second safeguard.
+
+**`LobbyPeer` type** (matches what the backend sends):
+
+```ts
+type LobbyPeer = {
+  dest_hash: string;
+  announced_name?: string;
+  nickname?: string;          // set by the peer's backend config
+  is_saved_contact?: boolean;
+  online?: boolean;
+};
+```
+
+### Groups
+
+Group state lives in both AsyncStorage (known group names) and the backend
+(`/getGroups`, `/getGroupChat/<name>`). The frontend merges the two lists on
+every poll. Groups are removed locally if the backend returns 404; network
+errors are treated as transient and the group is kept.
+
+### Offline Maps (native only)
+
+On first app launch (`app/_layout.tsx`) the app silently pre-downloads a
+Mapbox tile pack covering a 2 km radius around 虎尾 (Huwei, Taiwan):
+
+- Center: `23.706375, 120.430419`
+- Radius: 2 km
+- Zoom: 12–16
+
+The pack is named `huwei_map_2km`. Subsequent launches check for the pack by
+name and skip the download if it already exists.
+
+---
+
+## Backend API Reference
+
+The backend is documented in detail in
+[rns_app-core/API_FLOWS_AND_EXAMPLES.md](../rns_app-core/API_FLOWS_AND_EXAMPLES.md).
+The endpoints this app calls:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/identity` | GET | Own `dest_hash` and identity info |
+| `/getLobby` | GET | Active RNS peers |
+| `/getGroups` | GET | All known group rooms |
+| `/getGroupChat/<name>` | GET | Room state + message history |
+| `/getContactList` | GET | Saved contacts |
+| `/getChat/<hash>` | GET | Persisted chat with a contact |
+| `/getDirectChat/<hash>` | GET | Session-only chat with unsaved peer |
+| `/msgContact` | POST | Send to saved contact |
+| `/msgDirect` | POST | Send to unsaved peer |
+| `/msgGroup` | POST | Send to group room |
+| `/newGroup` | POST | Create group |
+| `/joinGroup` | POST | Join group with display name |
+| `/saveContact` | POST | Save lobby peer as contact |
+| `/blockContact` | POST | Block a saved contact |
+| `/clearChatHistory` | POST | Delete chat history for a peer |
+
+---
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` | Yes (native) | Mapbox public token for tile rendering and offline packs |
+
+Set in a `.env` file at the project root or in your CI environment. Not
+required for web builds (Mapbox is excluded from the web bundle).
+
+---
+
+## Troubleshooting
+
+### Lobby shows no peers
+
+1. Check the **JSON** tab — `/getLobby` response shows raw data. If it returns
+   an empty list, the backend has not received announces from other nodes.
+2. On Windows: open UDP port 4242 inbound so other nodes can connect back:
+   ```powershell
+   netsh advfirewall firewall add rule name="RNS UDP 4242" protocol=UDP dir=in localport=4242 action=allow
+   ```
+3. Verify the app is pointed at the correct backend IP (not `rns-chat.local`
+   if running on Windows).
+
+### Web build error: `mapbox-gl/dist/mapbox-gl.css` not found
+
+`@rnmapbox/maps` is native-only. The web build uses `utils/location.web.ts`
+to avoid importing it. If this error reappears, verify that `location.web.ts`
+exists and that Metro's platform extension resolution is not overridden in
+`metro.config.js`.
+
+### `mDNS rns-chat.local` not resolving
+
+This is a Multicast DNS name advertised by the Linux/macOS backend via
+Zeroconf. Windows clients may not resolve it reliably. Use the numeric IP
+address instead and configure it in the **JSON** settings tab.
