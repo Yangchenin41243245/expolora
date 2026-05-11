@@ -23,7 +23,7 @@ type ChatMessage = {
   text?: string;
   content?: string;
   message?: string;
-  sender?: string;
+  from_hash?: string;
   status?: string;
   timestamp?: number;
   createdAt?: string | number;
@@ -34,7 +34,7 @@ type ChatResult = {
   messages: ChatMessage[];
   count: number;
   storage_type?: 'persisted' | 'session';
-  peer?: { dest_hash: string; custom_nickname?: string; announced_name?: string };
+  peer?: { dest_hash: string; nickname?: string; announced_name?: string };
 };
 
 type ClearResult = {
@@ -112,7 +112,7 @@ const C = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function identity() {
-  const { baseUrl, lobbyPeers } = useMessaging();
+  const { baseUrl, lobbyPeers, localDestHash } = useMessaging();
 
   const [mode, setMode]           = useState<QueryMode>('contact');
   const [destHash, setDestHash]   = useState('');
@@ -201,7 +201,7 @@ export default function identity() {
   // ── 渲染 ──────────────────────────────────────────────────────────────────
 
   const peerName = (peer: typeof lobbyPeers[0]) =>
-    (peer as any).custom_nickname || peer.announced_name || shortHash(peer.dest_hash);
+    peer.nickname || peer.announced_name || shortHash(peer.dest_hash);
 
   return (
     <KeyboardAvoidingView
@@ -355,7 +355,7 @@ export default function identity() {
             <View style={styles.resultHeader}>
               <View style={styles.resultHeaderLeft}>
                 <Text style={styles.resultTitle}>
-                  {chatResult.peer?.custom_nickname
+                  {chatResult.peer?.nickname
                     || chatResult.peer?.announced_name
                     || shortHash(chatResult.dest_hash)}
                 </Text>
@@ -378,7 +378,7 @@ export default function identity() {
 
             {/* 訊息列表 */}
             {chatResult.messages.map((msg, idx) => (
-              <MessageCard key={msg.message_id ?? msg._id ?? idx} msg={msg} />
+              <MessageCard key={msg.message_id ?? msg._id ?? idx} msg={msg} localDestHash={localDestHash} />
             ))}
           </Animated.View>
         )}
@@ -468,11 +468,12 @@ export default function identity() {
 // 子元件
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MessageCard: React.FC<{ msg: ChatMessage }> = ({ msg }) => {
+const MessageCard: React.FC<{ msg: ChatMessage; localDestHash: string | null }> = ({ msg, localDestHash }) => {
   const text   = msgText(msg);
   const ts     = formatTs(msg.timestamp ?? msg.createdAt as any);
-  const sender = msg.sender;
-  const isSelf = sender === 'self' || sender === 'me';
+  const isSelf = localDestHash != null
+    ? msg.from_hash === localDestHash
+    : msg.status === 'delivered';
 
   return (
     <View style={[styles.msgCard, isSelf ? styles.msgCardSelf : styles.msgCardPeer]}>

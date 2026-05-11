@@ -519,7 +519,7 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               ) : (
                 lobbyPeers.map(peer => {
                   const selected = selectedHashes.has(peer.dest_hash);
-                  const name = peer.custom_nickname || peer.announced_name || shortHash(peer.dest_hash);
+                  const name = peer.nickname || peer.announced_name || shortHash(peer.dest_hash);
                   return (
                     <View key={peer.dest_hash}>
                       <TouchableOpacity
@@ -920,7 +920,7 @@ const AddMembersModal: React.FC<AddMembersModalProps> = ({
               ) : (
                 available.map(peer => {
                   const selected = selectedHashes.has(peer.dest_hash);
-                  const name = peer.custom_nickname || peer.announced_name || shortHash(peer.dest_hash);
+                  const name = peer.nickname || peer.announced_name || shortHash(peer.dest_hash);
                   return (
                     <View key={peer.dest_hash}>
                       <TouchableOpacity

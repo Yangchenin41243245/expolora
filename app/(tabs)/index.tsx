@@ -1,11 +1,10 @@
 // filepath: app/(tabs)/index.tsx
 import { Ionicons } from '@expo/vector-icons';
-import { useHeaderHeight } from '@react-navigation/elements';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -18,14 +17,10 @@ import {
   GiftedChat,
   IMessage,
   InputToolbar,
-  MessageText,
   Send,
   SystemMessage,
 } from 'react-native-gifted-chat';
-
-import LocationMessageBubble from '../../components/LocationMessageBubble';
-import type { LocationMessage, LocationPayload } from '../../types/chat';
-import { getCurrentLocation } from '../../utils/location';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMessaging } from '../context/MessagingContext';
 
 // ── 常數 ──────────────────────────────────────────────────────────────────────
@@ -35,28 +30,17 @@ const GROUP_POLL_INTERVAL_MS = 5000;
 const MY_USER_ID  = 1;
 const BOT_USER_ID = 2;
 
-const SYSTEM_PREFIXES = [
-  '[SYSTEM]', '[OUT]', '[SEND COMPLETE]', '[PACKET]',
-  '[PACKET RECV]', '[IN]', '[ERROR]', '[WARN]', '[INFO]', '[RECEIPT TIMEOUT]', '[GROUP]', '[GROUP INVITE]', '[GROUP SYSTEM]',
-];
-
-const isSystemLine = (raw: string): boolean => {
-  const t = raw.trim();
-  if (t === '') return true;
-  return SYSTEM_PREFIXES.some(p => t.startsWith(p));
-};
-
 // ── 型別 ──────────────────────────────────────────────────────────────────────
 
 type ChatMode = 'peer' | 'group' | null;
 
 type ChatState = {
-  messages: LocationMessage[];
+  messages: IMessage[];
   knownCount: number;
 };
 
 type RawGroupMsg = {
-  message_type: 'GROUP' | 'GROUP_INVITE' | 'GROUP_SYSTEM';
+  message_type: 'GROUP' | 'GROUP_INVITE' | 'GROUP_SYSTEM' | 'GROUP_JOIN';
   content?: string;
   from_hash?: string;
   from_name?: string;
@@ -66,82 +50,36 @@ type RawGroupMsg = {
 };
 
 type RawPeerMsg = {
-  _id?: string;
-  message_id?: string;
-  text?: unknown;
-  content?: unknown;
-  message?: unknown;
-  sender?: string;
-  status?: string;
+  msg_id?: string;
+  from_hash?: string;
+  to_hash?: string;
+  content?: string;
+  status?: string;       // 'delivered' = 自己發的, 'received' = 別人發的
   timestamp?: number;
-  createdAt?: string | number;
 };
 
 // ── 工具函式 ──────────────────────────────────────────────────────────────────
 
 const shortHash = (h: string) => (h ? `${h.slice(0, 8)}…` : '—');
 
-const LOCATION_MESSAGE_RE =
-  /(?:📍\s*)?Location:\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/i;
-
-const parseLocationMessage = (text: string): LocationPayload | undefined => {
-  const match = text.match(LOCATION_MESSAGE_RE);
-  if (!match) return undefined;
-
-  const latitude = Number(match[1]);
-  const longitude = Number(match[2]);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return undefined;
-  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return undefined;
-
-  return { latitude, longitude };
-};
-
-const withLocationPayload = <T extends LocationMessage>(message: T): T => {
-  const location = parseLocationMessage(message.text);
-  return location ? { ...message, location } : message;
-};
-
-const rawPeerMsgText = (raw: unknown): string => {
-  if (typeof raw === 'string') return raw;
-  if (typeof raw !== 'object' || raw === null) return JSON.stringify(raw) ?? String(raw);
-
-  const m = raw as RawPeerMsg;
-  const text = m.text ?? m.content ?? m.message;
-  return typeof text === 'string' ? text : JSON.stringify(raw) ?? String(raw);
-};
-
-const rawPeerMsgToIMessage = (
-  raw: unknown,
-  idx: number,
-  knownCount: number,
-): LocationMessage => {
-  const m = typeof raw === 'object' && raw !== null ? (raw as RawPeerMsg) : null;
-  const text = rawPeerMsgText(raw).trim();
-  const createdAt = m?.timestamp
-    ? new Date(m.timestamp * 1000)
-    : m?.createdAt
-      ? new Date(m.createdAt)
-      : new Date();
-
-  return withLocationPayload({
-    _id: m?._id ?? m?.message_id ?? `recv_${knownCount + idx}_${text.slice(0, 16)}`,
-    text,
-    createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt,
-    user: { _id: BOT_USER_ID, name: m?.sender ?? 'Peer' },
-  });
-};
+const rawPeerMsgToIMessage = (m: RawPeerMsg, idx: number): IMessage => ({
+  _id:       m.msg_id ?? `p2p_${idx}`,
+  text:      m.content ?? '',
+  createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
+  user:      { _id: m.status === 'delivered' ? MY_USER_ID : BOT_USER_ID },
+});
 
 const rawGroupMsgToIMessage = (
   m: RawGroupMsg,
   idx: number,
   selfName?: string,
-): LocationMessage => {
-  const isSystem = m.message_type === 'GROUP_SYSTEM' || m.message_type === 'GROUP_INVITE';
+): IMessage => {
+  const isSystem = m.message_type === 'GROUP_SYSTEM' || m.message_type === 'GROUP_INVITE' || m.message_type === 'GROUP_JOIN';
   const isSelf =
     m.status === 'delivered' ||
     (!!selfName && !!m.from_name && m.from_name === selfName);
 
-  return withLocationPayload({
+  return {
     _id:       m.message_id ?? `grp_${idx}_${m.timestamp ?? idx}`,
     text:      m.content ?? '',
     createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
@@ -152,7 +90,7 @@ const rawGroupMsgToIMessage = (
           _id:  isSelf ? MY_USER_ID : BOT_USER_ID,
           name: m.from_name ?? 'Member',
         },
-  });
+  };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -170,7 +108,6 @@ export default function ChatScreen() {
   const lobbyPeers    = lobbyPeersRaw    ?? [];
   const groupRooms    = groupRoomsRaw    ?? [];
   const refreshGroups = refreshGroupsRaw ?? (async () => {});
-  const headerHeight  = useHeaderHeight();
 
   // ── 選擇狀態：純字串，不存物件，從根本避免無限迴圈 ──────────────────────
   const [chatMode, setChatMode]                   = useState<ChatMode>(null);
@@ -183,8 +120,7 @@ export default function ChatScreen() {
 
   // ── 訊息快取 ──────────────────────────────────────────────────────────────
   const chatStatesRef = useRef<Record<string, ChatState>>({});
-  const [messages, setMessages] = useState<LocationMessage[]>([]);
-  const [locationLoading, setLocationLoading] = useState(false);
+  const [messages, setMessages] = useState<IMessage[]>([]);
 
   // ── 加入確認 Modal ────────────────────────────────────────────────────────
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -193,10 +129,12 @@ export default function ChatScreen() {
   const chatModeRef      = useRef<ChatMode>(null);
   const selectedPeerRef  = useRef<string | null>(null);
   const selectedGroupRef = useRef<string | null>(null);
+  const lobbyPeersRef    = useRef(lobbyPeers);
 
   useEffect(() => { chatModeRef.current = chatMode; },             [chatMode]);
   useEffect(() => { selectedPeerRef.current = selectedPeerHash; }, [selectedPeerHash]);
   useEffect(() => { selectedGroupRef.current = selectedGroupName; },[selectedGroupName]);
+  useEffect(() => { lobbyPeersRef.current = lobbyPeers; },          [lobbyPeers]);
 
   // ── 衍生：當前 peer / room 物件（純渲染用，不用於 effect 依賴）───────────
   const currentPeer  = lobbyPeers.find(p => p.dest_hash === selectedPeerHash) ?? null;
@@ -237,7 +175,7 @@ export default function ChatScreen() {
   }, [baseUrl]);
 
   // ── 快取更新：透過 ref 讀取當前狀態，避免 setState 觸發 effect ───────────
-  const applyMessages = useCallback((key: string, msgs: LocationMessage[], knownCount?: number) => {
+  const applyMessages = useCallback((key: string, msgs: IMessage[], knownCount?: number) => {
     const prev = chatStatesRef.current[key] ?? { messages: [], knownCount: 0 };
     chatStatesRef.current[key] = { messages: msgs, knownCount: knownCount ?? prev.knownCount };
     const mode  = chatModeRef.current;
@@ -255,21 +193,16 @@ export default function ChatScreen() {
       if (!hash) return;
       const key = `peer:${hash}`;
       try {
-        const res = await fetch(`${baseUrl}/messages`, { headers: { Accept: 'application/json' } });
+        const peer = lobbyPeersRef.current.find(p => p.dest_hash === hash);
+        const endpoint = peer?.is_saved_contact
+          ? `/getChat/${encodeURIComponent(hash)}`
+          : `/getDirectChat/${encodeURIComponent(hash)}`;
+        const res = await fetch(`${baseUrl}${endpoint}`, { headers: { Accept: 'application/json' } });
         if (!res.ok) return;
-        const json: unknown = await res.json();
-        if (!Array.isArray(json)) return;
-        const lines = json.map(rawPeerMsgText);
-        const state = chatStatesRef.current[key] ?? { messages: [], knownCount: 0 };
-        if (lines.length <= state.knownCount) return;
-        const incoming: LocationMessage[] = json
-          .slice(state.knownCount)
-          .filter(raw => !isSystemLine(rawPeerMsgText(raw)))
-          .map((raw, i) => rawPeerMsgToIMessage(raw, i, state.knownCount));
-        const updated = incoming.length > 0
-          ? GiftedChat.append(state.messages, incoming)
-          : state.messages;
-        applyMessages(key, updated, lines.length);
+        const json = await res.json();
+        const rawMsgs: RawPeerMsg[] = json?.data?.messages ?? [];
+        const converted = rawMsgs.map((m, i) => rawPeerMsgToIMessage(m, i)).reverse();
+        applyMessages(key, converted);
       } catch { /* 靜默 */ }
     };
     poll();
@@ -336,70 +269,6 @@ export default function ChatScreen() {
     }
   }, [baseUrl, applyMessages, lobbyPeersRaw, groupRoomsRaw]);
 
-  // ── 分享位置 ──────────────────────────────────────────────────────────────
-  const sendLocation = useCallback(async () => {
-    const mode  = chatModeRef.current;
-    const hash  = selectedPeerRef.current;
-    const gname = selectedGroupRef.current;
-    if (!mode) return;
-
-    if (mode === 'group') {
-      const room = groupRoomsRaw?.find(r => r.group_name === gname);
-      if (!room?.join_confirm) { setShowJoinModal(true); return; }
-    }
-
-    setLocationLoading(true);
-    try {
-      const { latitude, longitude } = await getCurrentLocation();
-
-      const locationMsg: LocationMessage = {
-        _id: `loc_${Date.now()}`,
-        text: `📍 Location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
-        createdAt: new Date(),
-        user: { _id: MY_USER_ID },
-        location: { latitude, longitude },
-        offlineStatus: 'queued',
-      };
-
-      // Append to local chat state
-      const key   = mode === 'peer' ? `peer:${hash}` : `group:${gname}`;
-      const state = chatStatesRef.current[key] ?? { messages: [], knownCount: 0 };
-      applyMessages(key, GiftedChat.append(state.messages, [locationMsg]));
-
-      // Send as plain text over the wire
-      try {
-        if (mode === 'group') {
-          await fetch(`${baseUrl}/msgGroup`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ group_name: gname, message: locationMsg.text }),
-          });
-        } else {
-          const peer     = lobbyPeersRaw?.find(p => p.dest_hash === hash);
-          const endpoint = peer?.is_saved_contact ? '/msgContact' : '/msgDirect';
-          await fetch(`${baseUrl}${endpoint}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ dest_hash: hash, message: locationMsg.text }),
-          });
-        }
-        // Mark as sent
-        locationMsg.offlineStatus = 'sent';
-      } catch {
-        locationMsg.offlineStatus = 'failed';
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '';
-      if (message === 'PERMISSION_DENIED') {
-        Alert.alert('需要定位權限', '請前往設定開啟定位權限以分享位置。');
-      } else {
-        Alert.alert('定位失敗', '無法取得目前位置，請稍後再試。');
-      }
-    } finally {
-      setLocationLoading(false);
-    }
-  }, [baseUrl, applyMessages, lobbyPeersRaw, groupRoomsRaw]);
-
   // ── 快速加入 ──────────────────────────────────────────────────────────────
   const quickJoinGroup = useCallback(async () => {
     const gname = selectedGroupRef.current;
@@ -416,40 +285,6 @@ export default function ChatScreen() {
   }, [baseUrl, refreshGroups]);
 
   // ── GiftedChat 渲染函式 ───────────────────────────────────────────────────
-
-  const renderCustomView = (props: any) => {
-    const msg = props.currentMessage as LocationMessage;
-    if (!msg?.location) return null;
-    return <LocationMessageBubble currentMessage={msg} />;
-  };
-
-  const renderMessageText = (props: any) => {
-    const msg = props.currentMessage as LocationMessage;
-    if (msg?.location) return null;
-    return <MessageText {...props} />;
-  };
-
-  const renderActions = (props: any) => {
-    const canAct = !!chatMode && !joinPending;
-    return (
-      <TouchableOpacity
-        style={styles.locationBtn}
-        onPress={sendLocation}
-        disabled={!canAct || locationLoading}
-        activeOpacity={0.6}
-      >
-        {locationLoading ? (
-          <ActivityIndicator size={20} color={isGroupMode ? '#0B6EFD' : '#00C853'} />
-        ) : (
-          <Ionicons
-            name="location-sharp"
-            size={24}
-            color={canAct ? (isGroupMode ? '#0B6EFD' : '#00C853') : '#AAAAAA'}
-          />
-        )}
-      </TouchableOpacity>
-    );
-  };
 
   const renderBubble = (props: any) => {
     const isMe = props.currentMessage?.user?._id === MY_USER_ID;
@@ -536,7 +371,7 @@ export default function ChatScreen() {
   // ── Header：左側節點下拉 / 右側群組下拉 ──────────────────────────────────
 
   const peerBtnLabel = chatMode === 'peer' && currentPeer
-    ? (currentPeer.custom_nickname || currentPeer.announced_name || shortHash(currentPeer.dest_hash))
+    ? (currentPeer.nickname || currentPeer.announced_name || shortHash(currentPeer.dest_hash))
     : '節點';
 
   const groupBtnLabel = chatMode === 'group' && currentGroup
@@ -545,7 +380,7 @@ export default function ChatScreen() {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor="#F6F6F6" />
 
       {/* ── Header ── */}
@@ -578,7 +413,7 @@ export default function ChatScreen() {
                 <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
                   {lobbyPeers.map((peer, idx) => {
                     const isSel = peer.dest_hash === selectedPeerHash && chatMode === 'peer';
-                    const name  = peer.custom_nickname || peer.announced_name || shortHash(peer.dest_hash);
+                    const name  = peer.nickname || peer.announced_name || shortHash(peer.dest_hash);
                     return (
                       <TouchableOpacity
                         key={peer.dest_hash}
@@ -678,37 +513,35 @@ export default function ChatScreen() {
       )}
 
       {/* ── 對話區 ── */}
-      <View style={{ flex: 1 }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'android' ? 'padding' : 'height'}
+        keyboardVerticalOffset={100}
+      >
         <GiftedChat
           messages={messages}
           onSend={onSend}
           user={{ _id: MY_USER_ID }}
           renderBubble={renderBubble}
           renderSystemMessage={renderSystemMessage}
-          renderMessageText={renderMessageText}
           renderInputToolbar={renderInputToolbar}
           renderSend={renderSend}
-          renderCustomView={renderCustomView}
-          renderActions={renderActions}
           messagesContainerStyle={{ backgroundColor: isGroupMode ? '#E8EFF8' : '#E5DDD5' }}
-          keyboardAvoidingViewProps={{
-            keyboardVerticalOffset: headerHeight + 52,
-          }}
           textInputProps={{
             placeholder: inputPlaceholder(),
             placeholderTextColor: '#999',
-            style: { fontSize: 16, color: '#000' },
+            style: { fontSize: 16 },
             editable: !!chatMode && !joinPending,
           }}
           listProps={{ keyboardShouldPersistTaps: 'handled' }}
           isSendButtonAlwaysVisible
           isScrollToBottomEnabled
-          scrollToBottomOffset={100}
+          scrollToBottomOffset={150}
           timeFormat="HH:mm"
           dateFormat="YYYY年M月D日"
           renderFooter={() => <JoinBanner />}
         />
-      </View>
+      </KeyboardAvoidingView>
 
       {/* ── 快速加入 Modal ── */}
       <QuickJoinModal
@@ -717,7 +550,7 @@ export default function ChatScreen() {
         onJoin={quickJoinGroup}
         onClose={() => setShowJoinModal(false)}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -885,11 +718,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, marginHorizontal: 8,
   },
   sendContainer: { justifyContent: 'center', alignItems: 'center', marginRight: 12, marginBottom: 8 },
-  locationBtn: {
-    justifyContent: 'center', alignItems: 'center',
-    width: 40, height: 44,
-    marginLeft: 4, marginBottom: 4,
-  },
   tickContainer: { alignItems: 'flex-end', marginRight: 8, marginTop: -4 },
   tick:          { fontSize: 12, color: 'rgba(0,0,0,0.4)' },
 
