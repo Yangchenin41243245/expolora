@@ -3,7 +3,10 @@
     "allow": [
       "Bash(Get-ChildItem -Path \"C:\\\\dev\\\\rns_app-core\" -Force)",
       "Bash(Select-Object -Property Name, PSIsContainer)",
-      "Bash(Format-Table -AutoSize)"
+      "Bash(Format-Table -AutoSize)",
+      "Bash(grep -n \"destination\\\\|remote_identity\\\\|initiator\\\\|link_id\\\\|hash\" \"C:\\\\Users\\\\T-Frog\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\Lib\\\\site-packages\\\\RNS\\\\Link.py\" | head -60)",
+      "Read(//c/Users/T-Frog/AppData/Local/Programs/Python/Python313/Lib/site-packages/RNS/**)",
+      "Bash(curl -s http://rns-chat.local:5000/identity)"
     ]
   }
 }

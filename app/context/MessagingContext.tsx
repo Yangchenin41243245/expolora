@@ -26,7 +26,7 @@ const STORAGE_KEY_EXCLUDED_GROUPS = 'excluded_group_names'; // string[] — 永�
 export type LobbyPeer = {
   dest_hash: string;
   announced_name?: string;
-  custom_nickname?: string;
+  nickname?: string;
   is_saved_contact?: boolean;
   online?: boolean;
 };

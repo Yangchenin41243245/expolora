@@ -36,17 +36,6 @@ const GROUP_POLL_INTERVAL_MS = 5000;
 const MY_USER_ID  = 1;
 const BOT_USER_ID = 2;
 
-const SYSTEM_PREFIXES = [
-  '[SYSTEM]', '[OUT]', '[SEND COMPLETE]', '[PACKET]',
-  '[PACKET RECV]', '[IN]', '[ERROR]', '[WARN]', '[INFO]', '[RECEIPT TIMEOUT]', '[GROUP]', '[GROUP INVITE]', '[GROUP SYSTEM]',
-];
-
-const isSystemLine = (raw: string): boolean => {
-  const t = raw.trim();
-  if (t === '') return true;
-  return SYSTEM_PREFIXES.some(p => t.startsWith(p));
-};
-
 // ── 型別 ──────────────────────────────────────────────────────────────────────
 
 type ChatMode = 'peer' | 'group' | null;
@@ -56,19 +45,50 @@ type ChatState = {
   knownCount: number;
 };
 
+type RawPeerMsg = {
+  message_id?: string;
+  text?: string;
+  content?: string;
+  message?: string;
+  from_hash?: string;
+  to_hash?: string;
+  sender?: string;
+  status?: string;
+  timestamp?: number;
+};
+
 type RawGroupMsg = {
   message_type: 'GROUP' | 'GROUP_INVITE' | 'GROUP_SYSTEM';
   content?: string;
   from_hash?: string;
   from_name?: string;
   message_id?: string;
-  status?: string;       // 'delivered' = 自己發的, 'received' = 別人發的
+  status?: string;
   timestamp?: number;
 };
 
 // ── 工具函式 ──────────────────────────────────────────────────────────────────
 
 const shortHash = (h: string) => (h ? `${h.slice(0, 8)}…` : '—');
+
+const isGroupJsonContent = (content: string | undefined): boolean => {
+  if (!content?.startsWith('{')) return false;
+  try { return JSON.parse(content)?.category === 'group'; }
+  catch { return false; }
+};
+
+const rawPeerMsgToIMessage = (m: RawPeerMsg, selfHash: string | null, idx: number): IMessage => {
+  const isSelf =
+    m.sender === 'self' || m.sender === 'me' ||
+    m.status === 'delivered' ||
+    (!!selfHash && m.from_hash === selfHash);
+  return {
+    _id:       m.message_id ?? `peer_${idx}`,
+    text:      m.text ?? m.content ?? m.message ?? '',
+    createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
+    user:      { _id: isSelf ? MY_USER_ID : BOT_USER_ID },
+  };
+};
 
 const rawGroupMsgToIMessage = (
   m: RawGroupMsg,
@@ -139,6 +159,12 @@ export default function ChatScreen() {
   useEffect(() => { selectedPeerRef.current = selectedPeerHash; }, [selectedPeerHash]);
   useEffect(() => { selectedGroupRef.current = selectedGroupName; },[selectedGroupName]);
 
+  // ref：供 poll callback 讀取最新的 lobby / selfHash，不需重建 interval
+  const lobbyPeersRef   = useRef(lobbyPeersRaw);
+  const selfDestHashRef = useRef(selfDestHash);
+  useEffect(() => { lobbyPeersRef.current   = lobbyPeersRaw; }, [lobbyPeersRaw]);
+  useEffect(() => { selfDestHashRef.current = selfDestHash;  }, [selfDestHash]);
+
   // ── 衍生：當前 peer / room 物件（純渲染用，不用於 effect 依賴）───────────
   const currentPeer  = lobbyPeers.find(p => p.dest_hash === selectedPeerHash) ?? null;
   const currentGroup = groupRooms.find(r => r.group_name === selectedGroupName) ?? null;
@@ -196,26 +222,17 @@ export default function ChatScreen() {
       if (!hash) return;
       const key = `peer:${hash}`;
       try {
-        const res = await fetch(`${baseUrl}/messages`, { headers: { Accept: 'application/json' } });
+        const isSaved  = lobbyPeersRef.current?.find(p => p.dest_hash === hash)?.is_saved_contact;
+        const endpoint = isSaved ? `/getChat/${hash}` : `/getDirectChat/${hash}`;
+        const res = await fetch(`${baseUrl}${endpoint}`, { headers: { Accept: 'application/json' } });
         if (!res.ok) return;
-        const json: unknown = await res.json();
-        if (!Array.isArray(json)) return;
-        const lines: string[] = json.map(i => (typeof i === 'string' ? i : JSON.stringify(i)));
-        const state = chatStatesRef.current[key] ?? { messages: [], knownCount: 0 };
-        if (lines.length <= state.knownCount) return;
-        const newLines = lines.slice(state.knownCount);
-        const incoming: IMessage[] = newLines
-          .filter(l => !isSystemLine(l))
-          .map((l, i) => ({
-            _id: `recv_${state.knownCount + i}_${l.slice(0, 16)}`,
-            text: l.trim(),
-            createdAt: new Date(),
-            user: { _id: BOT_USER_ID, name: 'Peer' },
-          }));
-        const updated = incoming.length > 0
-          ? GiftedChat.append(state.messages, incoming)
-          : state.messages;
-        applyMessages(key, updated, lines.length);
+        const json = await res.json();
+        const rawMsgs: RawPeerMsg[] = (json?.data?.messages ?? []).filter(
+          (m: RawPeerMsg) => !isGroupJsonContent(m.text ?? m.content ?? m.message)
+        );
+        const selfHash = selfDestHashRef.current;
+        const converted = rawMsgs.map((m, i) => rawPeerMsgToIMessage(m, selfHash, i)).reverse();
+        applyMessages(key, converted);
       } catch { /* 靜默 */ }
     };
     poll();
