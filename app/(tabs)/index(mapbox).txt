@@ -493,7 +493,7 @@ export default function ChatScreen() {
   // ── Header：左側節點下拉 / 右側群組下拉 ──────────────────────────────────
 
   const peerBtnLabel = chatMode === 'peer' && currentPeer
-    ? (currentPeer.custom_nickname || currentPeer.announced_name || shortHash(currentPeer.dest_hash))
+    ? (currentPeer.nickname || currentPeer.announced_name || shortHash(currentPeer.dest_hash))
     : '節點';
 
   const groupBtnLabel = chatMode === 'group' && currentGroup
@@ -535,7 +535,7 @@ export default function ChatScreen() {
                 <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
                   {lobbyPeers.map((peer, idx) => {
                     const isSel = peer.dest_hash === selectedPeerHash && chatMode === 'peer';
-                    const name  = peer.custom_nickname || peer.announced_name || shortHash(peer.dest_hash);
+                    const name  = peer.nickname || peer.announced_name || shortHash(peer.dest_hash);
                     return (
                       <TouchableOpacity
                         key={peer.dest_hash}
