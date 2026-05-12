@@ -117,7 +117,8 @@ export default function contacts() {
   const loadLobby = useCallback(async () => {
     try {
       const json = await apiFetch('/getLobby');
-      setLobbyPeers(json?.data?.lobby ?? []);
+      const peers: LobbyPeer[] = json?.data?.lobby ?? [];
+      setLobbyPeers(peers.filter(p => p.announced_name !== 'Unknown'));
     } catch { setLobbyPeers([]); }
   }, [apiFetch]);
 
