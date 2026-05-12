@@ -199,11 +199,14 @@ export default function ChatScreen() {
       if (!hash) return;
       const key = `peer:${hash}`;
       try {
-        const peer = lobbyPeersRef.current.find(p => p.dest_hash === hash);
-        const endpoint = peer?.is_saved_contact
-          ? `/getChat/${encodeURIComponent(hash)}`
-          : `/getDirectChat/${encodeURIComponent(hash)}`;
-        const res = await fetch(`${baseUrl}${endpoint}`, { headers: { Accept: 'application/json' } });
+        // Try /getChat first (saved contacts + blocked peers).
+        // Fall back to /getDirectChat on 404 (unsaved peers).
+        // This avoids relying on is_saved_contact from the lobby snapshot,
+        // which can be stale or incorrect due to link-registration timing.
+        let res = await fetch(`${baseUrl}/getChat/${encodeURIComponent(hash)}`, { headers: { Accept: 'application/json' } });
+        if (res.status === 404) {
+          res = await fetch(`${baseUrl}/getDirectChat/${encodeURIComponent(hash)}`, { headers: { Accept: 'application/json' } });
+        }
         if (!res.ok) return;
         const json = await res.json();
         const rawMsgs: RawPeerMsg[] = json?.data?.messages ?? [];
@@ -263,13 +266,19 @@ export default function ChatScreen() {
             body: JSON.stringify({ group_name: gname, message: msg.text }),
           });
         } else {
-          const peer     = lobbyPeersRaw?.find(p => p.dest_hash === hash);
-          const endpoint = peer?.is_saved_contact ? '/msgContact' : '/msgDirect';
-          await fetch(`${baseUrl}${endpoint}`, {
+          // Try /msgContact first; fall back to /msgDirect on 404 (unsaved peer).
+          const sendRes = await fetch(`${baseUrl}/msgContact`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify({ dest_hash: hash, message: msg.text }),
           });
+          if (sendRes.status === 404) {
+            await fetch(`${baseUrl}/msgDirect`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({ dest_hash: hash, message: msg.text }),
+            });
+          }
         }
       } catch { /* 靜默 */ }
     }
@@ -314,13 +323,18 @@ export default function ChatScreen() {
             body: JSON.stringify({ group_name: gname, message: locationMsg.text }),
           });
         } else {
-          const peer     = lobbyPeersRaw?.find(p => p.dest_hash === hash);
-          const endpoint = peer?.is_saved_contact ? '/msgContact' : '/msgDirect';
-          await fetch(`${baseUrl}${endpoint}`, {
+          const locSendRes = await fetch(`${baseUrl}/msgContact`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify({ dest_hash: hash, message: locationMsg.text }),
           });
+          if (locSendRes.status === 404) {
+            await fetch(`${baseUrl}/msgDirect`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({ dest_hash: hash, message: locationMsg.text }),
+            });
+          }
         }
         // Mark as sent
         locationMsg.offlineStatus = 'sent';
