@@ -18,12 +18,13 @@ import {
   GiftedChat,
   IMessage,
   InputToolbar,
+  MessageText,
   Send,
   SystemMessage,
 } from 'react-native-gifted-chat';
 
 import LocationMessageBubble from '../../components/LocationMessageBubble';
-import type { LocationMessage } from '../../types/chat';
+import type { LocationMessage, LocationPayload } from '../../types/chat';
 import { getCurrentLocation } from '../../utils/location';
 import { useMessaging } from '../context/MessagingContext';
 
@@ -82,7 +83,7 @@ const isGroupPacket = (content?: string): boolean => {
 const LOCATION_MESSAGE_RE =
   /(?:📍\s*)?Location:\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/i;
 
-const parseLocationPayload = (text: string): { latitude: number; longitude: number } | undefined => {
+const parseLocationMessage = (text: string): LocationPayload | undefined => {
   const match = text.match(LOCATION_MESSAGE_RE);
   if (!match) return undefined;
   const latitude  = Number(match[1]);
@@ -92,15 +93,18 @@ const parseLocationPayload = (text: string): { latitude: number; longitude: numb
   return { latitude, longitude };
 };
 
+const withLocationPayload = <T extends LocationMessage>(message: T): T => {
+  const location = parseLocationMessage(message.text);
+  return location ? { ...message, location } : message;
+};
+
 const rawPeerMsgToIMessage = (m: RawPeerMsg, idx: number): LocationMessage => {
-  const text = m.content ?? '';
-  return {
+  return withLocationPayload({
     _id:       m.msg_id ?? `p2p_${idx}`,
-    text,
+    text:      m.content ?? '',
     createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
     user:      { _id: m.status !== 'received' ? MY_USER_ID : BOT_USER_ID },
-    location:  parseLocationPayload(text),
-  };
+  });
 };
 
 const rawGroupMsgToIMessage = (
@@ -112,11 +116,10 @@ const rawGroupMsgToIMessage = (
   const isSelf =
     m.status === 'delivered' ||
     (!!selfName && !!m.from_name && m.from_name === selfName);
-  const text = m.content ?? '';
 
-  return {
+  return withLocationPayload({
     _id:       m.message_id ?? `grp_${idx}_${m.timestamp ?? idx}`,
-    text,
+    text:      m.content ?? '',
     createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
     system:    isSystem,
     user: isSystem
@@ -125,8 +128,7 @@ const rawGroupMsgToIMessage = (
           _id:  isSelf ? MY_USER_ID : BOT_USER_ID,
           name: m.from_name ?? 'Member',
         },
-    location:  isSystem ? undefined : parseLocationPayload(text),
-  };
+  });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -411,6 +413,12 @@ export default function ChatScreen() {
     return <LocationMessageBubble currentMessage={msg} />;
   };
 
+  const renderMessageText = (props: any) => {
+    const msg = props.currentMessage as LocationMessage;
+    if (msg?.location) return null;
+    return <MessageText {...props} />;
+  };
+
   const renderActions = (props: any) => {
     const canAct = !!chatMode && !joinPending;
     return (
@@ -667,6 +675,7 @@ export default function ChatScreen() {
           user={{ _id: MY_USER_ID }}
           renderBubble={renderBubble}
           renderSystemMessage={renderSystemMessage}
+          renderMessageText={renderMessageText}
           renderInputToolbar={renderInputToolbar}
           renderSend={renderSend}
           renderCustomView={renderCustomView}
