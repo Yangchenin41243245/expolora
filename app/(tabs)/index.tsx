@@ -70,7 +70,7 @@ const rawPeerMsgToIMessage = (m: RawPeerMsg, idx: number): IMessage => ({
   _id:       m.msg_id ?? `p2p_${idx}`,
   text:      m.content ?? '',
   createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
-  user:      { _id: m.status === 'delivered' ? MY_USER_ID : BOT_USER_ID },
+  user:      { _id: m.status !== 'received' ? MY_USER_ID : BOT_USER_ID },
 });
 
 const rawGroupMsgToIMessage = (
