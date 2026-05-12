@@ -231,15 +231,13 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       const results = await Promise.all(filteredNames.map(fetchOneGroup));
       const valid = results.filter((r): r is GroupRoom => r !== null);
-      const survivingNames = filteredNames.filter((_, i) => results[i] !== null);
-      if (survivingNames.length !== filteredNames.length) {
-        await saveKnownGroupNames(survivingNames);
-      }
+      // 不從 AsyncStorage 刪除找不到的群組 — 網路暫時中斷或後端重啟時不應丟失群組記錄
+      // 使用者可透過 unregisterGroup 手動移除
       setGroupRooms(valid);
     } finally {
       setGroupsLoading(false);
     }
-  }, [loadKnownGroupNames, fetchOneGroup, saveKnownGroupNames]);
+  }, [loadKnownGroupNames, fetchOneGroup]);
 
   // ── registerGroup：新增群組到已知清單並立即載入 ──────
 
