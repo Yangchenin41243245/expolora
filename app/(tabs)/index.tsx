@@ -78,26 +78,45 @@ const isGroupPacket = (content?: string): boolean => {
   }
 };
 
-const rawPeerMsgToIMessage = (m: RawPeerMsg, idx: number): IMessage => ({
-  _id:       m.msg_id ?? `p2p_${idx}`,
-  text:      m.content ?? '',
-  createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
-  user:      { _id: m.status !== 'received' ? MY_USER_ID : BOT_USER_ID },
-});
+// 解析訊息文字中的位置資訊（涵蓋有無 📍 前綴的格式）
+const LOCATION_MESSAGE_RE =
+  /(?:📍\s*)?Location:\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/i;
+
+const parseLocationPayload = (text: string): { latitude: number; longitude: number } | undefined => {
+  const match = text.match(LOCATION_MESSAGE_RE);
+  if (!match) return undefined;
+  const latitude  = Number(match[1]);
+  const longitude = Number(match[2]);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return undefined;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return undefined;
+  return { latitude, longitude };
+};
+
+const rawPeerMsgToIMessage = (m: RawPeerMsg, idx: number): LocationMessage => {
+  const text = m.content ?? '';
+  return {
+    _id:       m.msg_id ?? `p2p_${idx}`,
+    text,
+    createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
+    user:      { _id: m.status !== 'received' ? MY_USER_ID : BOT_USER_ID },
+    location:  parseLocationPayload(text),
+  };
+};
 
 const rawGroupMsgToIMessage = (
   m: RawGroupMsg,
   idx: number,
   selfName?: string,
-): IMessage => {
+): LocationMessage => {
   const isSystem = m.message_type === 'GROUP_SYSTEM' || m.message_type === 'GROUP_INVITE' || m.message_type === 'GROUP_JOIN';
   const isSelf =
     m.status === 'delivered' ||
     (!!selfName && !!m.from_name && m.from_name === selfName);
+  const text = m.content ?? '';
 
   return {
     _id:       m.message_id ?? `grp_${idx}_${m.timestamp ?? idx}`,
-    text:      m.content ?? '',
+    text,
     createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
     system:    isSystem,
     user: isSystem
@@ -106,6 +125,7 @@ const rawGroupMsgToIMessage = (
           _id:  isSelf ? MY_USER_ID : BOT_USER_ID,
           name: m.from_name ?? 'Member',
         },
+    location:  isSystem ? undefined : parseLocationPayload(text),
   };
 };
 
@@ -224,7 +244,7 @@ export default function ChatScreen() {
         const rawMsgs: RawPeerMsg[] = json?.data?.messages ?? [];
         const converted = rawMsgs
           .filter(m => !isGroupPacket(m.content))
-          .map((m, i) => rawPeerMsgToIMessage(m, i) as LocationMessage)
+          .map((m, i) => rawPeerMsgToIMessage(m, i))
           .reverse();
         applyMessages(key, converted);
       } catch { /* 靜默 */ }
@@ -247,7 +267,7 @@ export default function ChatScreen() {
         const json = await res.json();
         const rawMsgs: RawGroupMsg[] = json?.data?.messages ?? [];
         const selfName: string | undefined = json?.data?.group_room?.self_name;
-        const converted = rawMsgs.map((m, i) => rawGroupMsgToIMessage(m, i, selfName) as LocationMessage).reverse();
+        const converted = rawMsgs.map((m, i) => rawGroupMsgToIMessage(m, i, selfName)).reverse();
         applyMessages(key, converted);
       } catch { /* 靜默 */ }
     };
