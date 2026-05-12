@@ -223,21 +223,20 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
   const refreshGroups = useCallback(async () => {
     setGroupsLoading(true);
     try {
-      const names = await loadKnownGroupNames();
-      const filteredNames = names.filter(n => !pendingRemoveRef.current.has(n));
-      if (filteredNames.length === 0) {
-        setGroupRooms([]);
-        return;
-      }
-      const results = await Promise.all(filteredNames.map(fetchOneGroup));
-      const valid = results.filter((r): r is GroupRoom => r !== null);
-      // 不從 AsyncStorage 刪除找不到的群組 — 網路暫時中斷或後端重啟時不應丟失群組記錄
-      // 使用者可透過 unregisterGroup 手動移除
-      setGroupRooms(valid);
+      const res = await fetch(
+        `http://${hostRef.current}:${portRef.current}/getGroups`,
+        { headers: { Accept: 'application/json' } }
+      );
+      if (!res.ok) return;
+      const json = await res.json();
+      const rooms: GroupRoom[] = (json?.data?.groups ?? []) as GroupRoom[];
+      // 將後端群組清單同步回 AsyncStorage，解決重裝後名稱清單遺失的問題
+      await saveKnownGroupNames(rooms.map(r => r.group_name));
+      setGroupRooms(rooms.filter(r => !pendingRemoveRef.current.has(r.group_name)));
     } finally {
       setGroupsLoading(false);
     }
-  }, [loadKnownGroupNames, fetchOneGroup]);
+  }, [saveKnownGroupNames]);
 
   // ── registerGroup：新增群組到已知清單並立即載入 ──────
 
