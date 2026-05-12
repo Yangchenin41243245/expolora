@@ -45,3 +45,19 @@ P2P 訊息顯示問題 — 診斷與修正
   GET http://<IP>:<PORT>/getChat/<對方 dest_hash>
 若 data.messages 為空陣列，確認是後端 race condition 問題。
 修正後應能看到訊息（status: received）。
+
+── 最終狀態（2026-05-12 驗證通過）────────────────────────────────────────────
+問題 1（訊息跳回左側）：已解決
+問題 2（對方看不到訊息）：已解決
+雙向 P2P 文字訊息正常顯示。
+
+後端最終修正摘要（詳見 C:\dev\rns_app-core\docs\p2p_link_race_condition.txt）：
+  - on_link_established 加入 link.identify(self.destination.identity)
+    → 讓對方 get_remote_identity() 可取得正確 identity
+  - on_link_packet fallback 清除 active_links 殘留 own_hash entry
+  - on_link_packet fallback identity 為 None 時輸出明確 warning
+
+前端修正摘要：
+  - rawPeerMsgToIMessage: status !== 'received' 判斷自己送出的訊息
+  - poll: 先試 /getChat，404 才 fallback /getDirectChat
+  - send: 先試 /msgContact，404 才 fallback /msgDirect
