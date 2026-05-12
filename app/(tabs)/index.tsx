@@ -66,6 +66,18 @@ type RawPeerMsg = {
 
 const shortHash = (h: string) => (h ? `${h.slice(0, 8)}…` : '—');
 
+// 群組封包（invite / message / joined）會透過 RNS 點對點通道傳送，
+// 後端會將它們存入直接訊息記錄。此函式偵測這些封包以便在 P2P 聊天介面過濾掉。
+const isGroupPacket = (content?: string): boolean => {
+  if (!content) return false;
+  try {
+    const p = JSON.parse(content);
+    return typeof p === 'object' && p !== null && p.category === 'group';
+  } catch {
+    return false;
+  }
+};
+
 const rawPeerMsgToIMessage = (m: RawPeerMsg, idx: number): IMessage => ({
   _id:       m.msg_id ?? `p2p_${idx}`,
   text:      m.content ?? '',
@@ -210,7 +222,10 @@ export default function ChatScreen() {
         if (!res.ok) return;
         const json = await res.json();
         const rawMsgs: RawPeerMsg[] = json?.data?.messages ?? [];
-        const converted = rawMsgs.map((m, i) => rawPeerMsgToIMessage(m, i) as LocationMessage).reverse();
+        const converted = rawMsgs
+          .filter(m => !isGroupPacket(m.content))
+          .map((m, i) => rawPeerMsgToIMessage(m, i) as LocationMessage)
+          .reverse();
         applyMessages(key, converted);
       } catch { /* 靜默 */ }
     };
