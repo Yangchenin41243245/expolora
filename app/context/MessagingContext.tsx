@@ -284,7 +284,9 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
       );
       if (!res.ok) return;
       const json = await res.json();
-      setLobbyPeers(json?.data?.lobby ?? []);
+      const peers: LobbyPeer[] = json?.data?.lobby ?? [];
+      // 過濾掉顯示名稱為 "Unknown" 的節點（通常是自己的本地節點）
+      setLobbyPeers(peers.filter(p => (p.nickname || p.announced_name) !== 'Unknown'));
     } catch { /* 靜默失敗 */ }
   }, []);
 
