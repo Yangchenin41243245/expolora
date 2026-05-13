@@ -1,4 +1,5 @@
 // filepath: app/(tabs)/identity.tsx
+import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -52,38 +53,6 @@ type QueryMode = 'contact' | 'direct';
 
 const shortHash = (h: string) => (h ? `${h.slice(0, 10)}…` : '—');
 
-const formatTs = (ts?: number | string) => {
-  if (!ts) return null;
-  const d = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts);
-  if (isNaN(d.getTime())) return null;
-  return d.toLocaleString('zh-TW', {
-    month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-  });
-};
-
-const msgText = (m: ChatMessage) =>
-  m.text ?? m.content ?? m.message ?? '（無內容）';
-
-const statusColor = (s?: string) => {
-  switch (s) {
-    case 'delivered': return C.green;
-    case 'received':  return C.accent;
-    case 'send_pending': return C.yellow;
-    case 'send_timeout': return C.danger;
-    default: return C.textDim;
-  }
-};
-
-const statusLabel = (s?: string) => {
-  switch (s) {
-    case 'delivered':    return '已送達';
-    case 'received':     return '已接收';
-    case 'send_pending': return '傳送中';
-    case 'send_timeout': return '逾時';
-    default: return s ?? '—';
-  }
-};
 
 // ── 顏色常數 ─────────────────────────────────────────────────────────────────
 
@@ -112,7 +81,7 @@ const C = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function identity() {
-  const { baseUrl, lobbyPeers, localDestHash } = useMessaging();
+  const { baseUrl, lobbyPeers } = useMessaging();
 
   const [mode, setMode]           = useState<QueryMode>('contact');
   const [destHash, setDestHash]   = useState('');
@@ -348,38 +317,18 @@ export default function identity() {
           </Animated.View>
         )}
 
-        {/* ── 對話紀錄結果 ── */}
+        {/* ── 對話紀錄結果（raw JSON）── */}
         {chatResult && (
           <Animated.View style={{ opacity: resultAnim }}>
-            {/* 摘要列 */}
-            <View style={styles.resultHeader}>
-              <View style={styles.resultHeaderLeft}>
-                <Text style={styles.resultTitle}>
-                  {chatResult.peer?.nickname
-                    || chatResult.peer?.announced_name
-                    || shortHash(chatResult.dest_hash)}
-                </Text>
-                <Text style={styles.resultSub}>
-                  {mode === 'contact' ? 'getChat' : 'getDirectChat'} · {chatResult.count} 筆
-                </Text>
-              </View>
-              <View style={styles.countBadge}>
-                <Text style={styles.countBadgeText}>{chatResult.count}</Text>
-              </View>
-            </View>
-
-            {/* 無紀錄 */}
-            {chatResult.count === 0 && (
-              <View style={styles.emptyResult}>
-                <Text style={styles.emptyResultIcon}>💬</Text>
-                <Text style={styles.emptyResultText}>無對話紀錄</Text>
-              </View>
-            )}
-
-            {/* 訊息列表 */}
-            {chatResult.messages.map((msg, idx) => (
-              <MessageCard key={msg.message_id ?? msg._id ?? idx} msg={msg} localDestHash={localDestHash} />
-            ))}
+            <TouchableOpacity
+              style={styles.copyBtn}
+              onPress={() => Clipboard.setStringAsync(JSON.stringify(chatResult, null, 2))}
+            >
+              <Text style={styles.copyBtnText}>複製 JSON</Text>
+            </TouchableOpacity>
+            <Text style={styles.rawJson} selectable>
+              {JSON.stringify(chatResult, null, 2)}
+            </Text>
           </Animated.View>
         )}
 
@@ -463,43 +412,6 @@ export default function identity() {
     </KeyboardAvoidingView>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 子元件
-// ─────────────────────────────────────────────────────────────────────────────
-
-const MessageCard: React.FC<{ msg: ChatMessage; localDestHash: string | null }> = ({ msg, localDestHash }) => {
-  const text   = msgText(msg);
-  const ts     = formatTs(msg.timestamp ?? msg.createdAt as any);
-  const isSelf = localDestHash != null
-    ? msg.from_hash === localDestHash
-    : msg.status === 'delivered';
-
-  return (
-    <View style={[styles.msgCard, isSelf ? styles.msgCardSelf : styles.msgCardPeer]}>
-      <View style={styles.msgTopRow}>
-        {/* 方向標籤 */}
-        <View style={[styles.dirTag, isSelf ? styles.dirTagSelf : styles.dirTagPeer]}>
-          <Text style={styles.dirTagText}>{isSelf ? '↑ 發送' : '↓ 接收'}</Text>
-        </View>
-        {/* 狀態標籤 */}
-        {msg.status && (
-          <View style={[styles.statusTag, { borderColor: statusColor(msg.status) }]}>
-            <Text style={[styles.statusTagText, { color: statusColor(msg.status) }]}>
-              {statusLabel(msg.status)}
-            </Text>
-          </View>
-        )}
-        {/* 時間戳 */}
-        {ts && <Text style={styles.msgTs}>{ts}</Text>}
-      </View>
-      <Text style={styles.msgText} selectable>{text}</Text>
-      {(msg.message_id ?? msg._id) && (
-        <Text style={styles.msgId}>#{(msg.message_id ?? msg._id ?? '').slice(0, 16)}</Text>
-      )}
-    </View>
-  );
-};
 
 const ClearStat: React.FC<{ label: string; value: number | string; text?: boolean }> = ({ label, value, text }) => (
   <View style={styles.clearStatCell}>
@@ -731,4 +643,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5, paddingVertical: 1,
   },
   tagText: { color: C.textDim, fontSize: 10 },
+  rawJson: { color: '#d4d4d4', fontFamily: 'monospace', fontSize: 12, lineHeight: 18 },
+  copyBtn: {
+    alignSelf: 'flex-end', backgroundColor: '#1e2130',
+    borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6,
+    marginBottom: 8, borderWidth: 1, borderColor: '#2a3050',
+  },
+  copyBtnText: { color: '#4a90e2', fontSize: 12, fontFamily: 'monospace' },
 });
