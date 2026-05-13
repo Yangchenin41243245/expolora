@@ -101,6 +101,15 @@ export default function GroupsScreen() {
 
   useEffect(() => { handleRefresh(); }, []);
 
+  // groupRooms 更新時同步已開啟的 detail modal
+  useEffect(() => {
+    setScene(prev => {
+      if (prev.type !== 'detail') return prev;
+      const updated = groupRooms.find(r => r.group_name === prev.room.group_name);
+      return updated ? { type: 'detail', room: updated } : prev;
+    });
+  }, [groupRooms]);
+
 
   // ── API helpers ───────────────────────────────────────────────────────────
 
@@ -113,6 +122,19 @@ export default function GroupsScreen() {
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error_message ?? `HTTP ${res.status}`);
     return json;
+  }, [baseUrl]);
+
+  const fetchRoomDetail = useCallback(async (group_name: string): Promise<GroupRoom | null> => {
+    try {
+      const res = await fetch(`${baseUrl}/getGroupChat/${encodeURIComponent(group_name)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return (json?.data?.group_room as GroupRoom) ?? null;
+    } catch {
+      return null;
+    }
   }, [baseUrl]);
 
   // ── 群組操作 ──────────────────────────────────────────────────────────────
@@ -194,7 +216,17 @@ export default function GroupsScreen() {
       }}>
         <TouchableOpacity
           style={styles.groupRow}
-          onPress={() => setScene({ type: 'detail', room: item })}
+          onPress={() => {
+            setScene({ type: 'detail', room: item });
+            fetchRoomDetail(item.group_name).then(fresh => {
+              if (!fresh) return;
+              setScene(s =>
+                s.type === 'detail' && s.room.group_name === item.group_name
+                  ? { type: 'detail', room: fresh }
+                  : s
+              );
+            });
+          }}
           activeOpacity={0.75}
         >
           {/* 左側色塊標識 */}

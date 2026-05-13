@@ -98,9 +98,9 @@ const withLocationPayload = <T extends LocationMessage>(message: T): T => {
   return location ? { ...message, location } : message;
 };
 
-const rawPeerMsgToIMessage = (m: RawPeerMsg, idx: number): LocationMessage => {
+const rawPeerMsgToIMessage = (m: RawPeerMsg, _idx: number): LocationMessage => {
   return withLocationPayload({
-    _id:       m.msg_id ?? `p2p_${idx}`,
+    _id:       m.msg_id ?? [m.timestamp, m.from_hash?.slice(0, 8), (m.content ?? '').slice(0, 16)].join('_'),
     text:      m.content ?? '',
     createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
     user:      { _id: m.status !== 'received' ? MY_USER_ID : BOT_USER_ID },
@@ -109,7 +109,7 @@ const rawPeerMsgToIMessage = (m: RawPeerMsg, idx: number): LocationMessage => {
 
 const rawGroupMsgToIMessage = (
   m: RawGroupMsg,
-  idx: number,
+  _idx: number,
   selfName?: string,
 ): LocationMessage => {
   const isSystem = m.message_type === 'GROUP_SYSTEM' || m.message_type === 'GROUP_INVITE' || m.message_type === 'GROUP_JOIN';
@@ -118,7 +118,7 @@ const rawGroupMsgToIMessage = (
     (!!selfName && !!m.from_name && m.from_name === selfName);
 
   return withLocationPayload({
-    _id:       m.message_id ?? `grp_${idx}_${m.timestamp ?? idx}`,
+    _id:       m.message_id ?? [m.timestamp, m.from_hash?.slice(0, 8), (m.content ?? '').slice(0, 16)].join('_'),
     text:      m.content ?? '',
     createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
     system:    isSystem,
@@ -182,25 +182,82 @@ export default function ChatScreen() {
   const joinPending  = chatMode === 'group' && !!currentGroup && !currentGroup.join_confirm;
   const isGroupMode  = chatMode === 'group';
 
+  // ── 快取更新：透過 ref 讀取當前狀態，避免 setState 觸發 effect ───────────
+  const applyMessages = useCallback((key: string, msgs: LocationMessage[], knownCount?: number) => {
+    const prev = chatStatesRef.current[key] ?? { messages: [], knownCount: 0 };
+    chatStatesRef.current[key] = { messages: msgs, knownCount: knownCount ?? prev.knownCount };
+    const mode  = chatModeRef.current;
+    const pHash = selectedPeerRef.current;
+    const gName = selectedGroupRef.current;
+    const curKey = mode === 'peer' ? `peer:${pHash}` : mode === 'group' ? `group:${gName}` : '';
+    if (curKey === key) setMessages(msgs);
+  }, []);
+
+  // ── 輪詢函式（抽出為 useCallback 供 select* 切換後立即觸發）─────────────
+  const pollPeer = useCallback(async () => {
+    const hash = selectedPeerRef.current;
+    if (!hash) return;
+    const key = `peer:${hash}`;
+    try {
+      // Try /getChat first (saved contacts + blocked peers).
+      // Fall back to /getDirectChat on 404 (unsaved peers).
+      // This avoids relying on is_saved_contact from the lobby snapshot,
+      // which can be stale or incorrect due to link-registration timing.
+      let res = await fetch(`${baseUrl}/getChat/${encodeURIComponent(hash)}`, { headers: { Accept: 'application/json' } });
+      if (res.status === 404) {
+        res = await fetch(`${baseUrl}/getDirectChat/${encodeURIComponent(hash)}`, { headers: { Accept: 'application/json' } });
+      }
+      if (!res.ok) return;
+      const json = await res.json();
+      const rawMsgs: RawPeerMsg[] = json?.data?.messages ?? [];
+      const converted = rawMsgs
+        .filter(m => !isGroupPacket(m.content))
+        .map((m, i) => rawPeerMsgToIMessage(m, i))
+        .reverse();
+      applyMessages(key, converted);
+    } catch { /* 靜默 */ }
+  }, [baseUrl, applyMessages]);
+
+  const pollGroup = useCallback(async () => {
+    const groupName = selectedGroupRef.current;
+    if (!groupName) return;
+    const key = `group:${groupName}`;
+    try {
+      const res = await fetch(`${baseUrl}/getGroupChat/${encodeURIComponent(groupName)}`, { headers: { Accept: 'application/json' } });
+      if (!res.ok) return;
+      const json = await res.json();
+      const rawMsgs: RawGroupMsg[] = json?.data?.messages ?? [];
+      const selfName: string | undefined = json?.data?.group_room?.self_name;
+      const converted = rawMsgs.map((m, i) => rawGroupMsgToIMessage(m, i, selfName)).reverse();
+      applyMessages(key, converted);
+    } catch { /* 靜默 */ }
+  }, [baseUrl, applyMessages]);
+
   // ── 切換對話目標 ──────────────────────────────────────────────────────────
 
   const selectPeer = useCallback((hash: string) => {
+    chatModeRef.current = 'peer';
+    selectedPeerRef.current = hash;
     setChatMode('peer');
     setSelectedPeerHash(hash);
     setPeerDropOpen(false);
     setGroupDropOpen(false);
     const key = `peer:${hash}`;
     setMessages(chatStatesRef.current[key]?.messages ?? []);
-  }, []);
+    void pollPeer();
+  }, [pollPeer]);
 
   const selectGroup = useCallback((name: string) => {
+    chatModeRef.current = 'group';
+    selectedGroupRef.current = name;
     setChatMode('group');
     setSelectedGroupName(name);
     setPeerDropOpen(false);
     setGroupDropOpen(false);
     const key = `group:${name}`;
     setMessages(chatStatesRef.current[key]?.messages ?? []);
-  }, []);
+    void pollGroup();
+  }, [pollGroup]);
 
   // ── baseUrl 變更時全部重置 ────────────────────────────────────────────────
   const prevBaseUrl = useRef(baseUrl);
@@ -214,69 +271,21 @@ export default function ChatScreen() {
     setSelectedGroupName(null);
   }, [baseUrl]);
 
-  // ── 快取更新：透過 ref 讀取當前狀態，避免 setState 觸發 effect ───────────
-  const applyMessages = useCallback((key: string, msgs: LocationMessage[], knownCount?: number) => {
-    const prev = chatStatesRef.current[key] ?? { messages: [], knownCount: 0 };
-    chatStatesRef.current[key] = { messages: msgs, knownCount: knownCount ?? prev.knownCount };
-    const mode  = chatModeRef.current;
-    const pHash = selectedPeerRef.current;
-    const gName = selectedGroupRef.current;
-    const curKey = mode === 'peer' ? `peer:${pHash}` : mode === 'group' ? `group:${gName}` : '';
-    if (curKey === key) setMessages(msgs);
-  }, []);
-
   // ── 一對一輪詢 ────────────────────────────────────────────────────────────
   useEffect(() => {
-    const poll = async () => {
-      if (chatModeRef.current !== 'peer') return;
-      const hash = selectedPeerRef.current;
-      if (!hash) return;
-      const key = `peer:${hash}`;
-      try {
-        // Try /getChat first (saved contacts + blocked peers).
-        // Fall back to /getDirectChat on 404 (unsaved peers).
-        // This avoids relying on is_saved_contact from the lobby snapshot,
-        // which can be stale or incorrect due to link-registration timing.
-        let res = await fetch(`${baseUrl}/getChat/${encodeURIComponent(hash)}`, { headers: { Accept: 'application/json' } });
-        if (res.status === 404) {
-          res = await fetch(`${baseUrl}/getDirectChat/${encodeURIComponent(hash)}`, { headers: { Accept: 'application/json' } });
-        }
-        if (!res.ok) return;
-        const json = await res.json();
-        const rawMsgs: RawPeerMsg[] = json?.data?.messages ?? [];
-        const converted = rawMsgs
-          .filter(m => !isGroupPacket(m.content))
-          .map((m, i) => rawPeerMsgToIMessage(m, i))
-          .reverse();
-        applyMessages(key, converted);
-      } catch { /* 靜默 */ }
-    };
-    poll();
-    const t = setInterval(poll, POLL_INTERVAL_MS);
+    const t = setInterval(() => {
+      if (chatModeRef.current === 'peer') void pollPeer();
+    }, POLL_INTERVAL_MS);
     return () => clearInterval(t);
-  }, [baseUrl, applyMessages]);
+  }, [pollPeer]);
 
   // ── 群組輪詢 ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    const poll = async () => {
-      if (chatModeRef.current !== 'group') return;
-      const groupName = selectedGroupRef.current;
-      if (!groupName) return;
-      const key = `group:${groupName}`;
-      try {
-        const res = await fetch(`${baseUrl}/getGroupChat/${groupName}`, { headers: { Accept: 'application/json' } });
-        if (!res.ok) return;
-        const json = await res.json();
-        const rawMsgs: RawGroupMsg[] = json?.data?.messages ?? [];
-        const selfName: string | undefined = json?.data?.group_room?.self_name;
-        const converted = rawMsgs.map((m, i) => rawGroupMsgToIMessage(m, i, selfName)).reverse();
-        applyMessages(key, converted);
-      } catch { /* 靜默 */ }
-    };
-    poll();
-    const t = setInterval(poll, GROUP_POLL_INTERVAL_MS);
+    const t = setInterval(() => {
+      if (chatModeRef.current === 'group') void pollGroup();
+    }, GROUP_POLL_INTERVAL_MS);
     return () => clearInterval(t);
-  }, [baseUrl, applyMessages]);
+  }, [pollGroup]);
 
   // ── 發送 ──────────────────────────────────────────────────────────────────
   const onSend = useCallback(async (newMessages: IMessage[] = []) => {

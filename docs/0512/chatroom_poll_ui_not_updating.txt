@@ -1,0 +1,175 @@
+================================================================
+Active Chatroom Poll UI Not Updating
+驗證日期：2026-05-13
+分支：fixgroup_for_test
+================================================================
+
+## 背景
+
+本文件記錄 expolora 前端聊天畫面在輪詢成功的情況下，
+畫面未即時更新的問題原始描述、程式碼逐項驗證結果，
+以及補充發現與優先順序排序。
+
+================================================================
+症狀描述
+================================================================
+
+- Poll 請求成功並回傳新訊息（HTTP 200，有 data）。
+- 當前開啟的聊天畫面不渲染新訊息。
+- 切換房間或重新進入聊天有時才顯示新訊息。
+
+================================================================
+程式碼驗證結果
+================================================================
+
+── Likely Cause 1：applyMessages 的 key mismatch ──────────────
+
+檔案：app/(tabs)/index.tsx
+- 第 218–226 行 applyMessages（useCallback，deps = []）：
+
+    const curKey = mode === 'peer'  ? `peer:${pHash}`
+                 : mode === 'group' ? `group:${gName}` : '';
+    if (curKey === key) setMessages(msgs);
+
+  UI 更新條件：curKey 必須完全等於 poll 傳入的 key。
+
+【確認的競態條件（TOCTOU）】
+  群組 poll（第 267 行）是非同步 fetch。
+  fetch 執行期間若使用者切換模式（selectGroup / selectPeer），
+  chatModeRef / selectedGroupRef 會被下一個 useEffect tick 更新。
+  fetch 完成、applyMessages 被呼叫時，mode 已是新模式，
+  curKey 與 key 不符 → setMessages 不執行 → 畫面不更新。
+
+  快取仍然正確寫入（chatStatesRef.current[key] = msgs），
+  所以切換回原群組後能看到訊息——與症狀描述吻合。
+
+【額外發現：切換群組後無立即 poll】
+  group poll effect 的 deps = [baseUrl, applyMessages]（第 279 行）。
+  applyMessages 的 deps = []（第 226 行），永遠不變。
+  因此切換群組不會重跑 effect，沒有立即觸發 fetch，
+  需等至多 GROUP_POLL_INTERVAL_MS = 5000ms 才有第一次更新。
+  這也解釋「切換房間後有時看到新訊息」——看到的是快取，
+  不是即時 fetch 的結果。
+
+結論：✅ 確認。TOCTOU race 與切換後無即時 poll 均已驗證。
+
+── Likely Cause 2：Group name URL 未 encode ───────────────────
+
+檔案：app/(tabs)/index.tsx
+- 第 267 行群組 poll：
+
+    fetch(`${baseUrl}/getGroupChat/${groupName}`, ...)
+
+  groupName 未使用 encodeURIComponent。
+
+- 對比第 240 行 peer poll：
+
+    fetch(`${baseUrl}/getChat/${encodeURIComponent(hash)}`, ...)
+
+  已 encode，兩處處理不一致。
+
+- groups.tsx 第 486 行 UI hint：
+    「群組名稱建議使用 kebab-case」
+  現行 naming convention 限制在 ASCII，所以實際上不觸發問題，
+  但屬防禦性缺口。
+
+結論：✅ 確認（低風險）。建議補上 encodeURIComponent 保持一致。
+
+── Likely Cause 3：Message ID 不穩定（index-based fallback）──
+
+檔案：app/(tabs)/index.tsx
+- 第 121 行 rawGroupMsgToIMessage：
+
+    _id: m.message_id ?? `grp_${idx}_${m.timestamp ?? idx}`
+
+  fallback ID 包含 idx（陣列中的位置）。
+  後端若在訊息列表前端插入新訊息，所有舊訊息的 idx 遞增，
+  同一則訊息會產生不同 _id。
+
+  GiftedChat 以 _id 為去重鍵：
+  - 若 _id 改變 → 視為全新訊息，列表跳動。
+  - 若後端回傳順序改變 → 重複 _id，GiftedChat 略過部分訊息。
+
+- 同樣問題存在於 peer 訊息（第 103 行）：
+
+    _id: m.msg_id ?? `p2p_${idx}`
+
+  甚至更脆弱，fallback 只有 index，無 timestamp。
+
+結論：✅ 確認（中等風險）。後端若始終提供 message_id 可規避，
+      但 fallback 策略本身不安全。
+
+================================================================
+補充發現（原文件未提及）
+================================================================
+
+1. 兩個 poll effect 共用同一個 deps 結構
+   - peer poll：deps = [baseUrl, applyMessages]（第 257 行）
+   - group poll：deps = [baseUrl, applyMessages]（第 279 行）
+   - 兩者皆在 mount 時執行一次 poll()，之後靠 setInterval 維持。
+   - 當使用者選擇新的 peer 或 group，effect 不重跑，
+     無立即 fetch，最多需等待各自的 interval。
+
+2. 兩個 poll 的互斥機制
+   - peer poll 開頭：if (chatModeRef.current !== 'peer') return;
+   - group poll 開頭：if (chatModeRef.current !== 'group') return;
+   - 正確互斥，不會互相干擾。✅
+
+3. 訊息快取策略正確
+   - chatStatesRef.current[key] 無論 curKey 是否匹配都會被寫入。
+   - 切換房間時 selectPeer / selectGroup 從 chatStatesRef 讀取快取
+     立即顯示，UX 流暢。但快取可能落後於後端最新狀態。
+
+================================================================
+問題優先順序排序
+================================================================
+
+優先  問題                              實際影響
+────  ────────────────────────────────  ────────────────────────────
+高    切換群組後無立即 poll             每次切換必等 ≤5s，使用者明顯感知
+中    TOCTOU key mismatch              切換速度快或 fetch 慢時必現，畫面不更新
+中    message_id fallback 含 index     後端無 message_id 時訊息跳動或漏顯
+低    Group name URL 未 encode         現行 naming convention 下不觸發
+
+================================================================
+建議修復方向
+================================================================
+
+Fix 1（高優先）：切換群組 / peer 後立即 poll
+  selectGroup / selectPeer 呼叫後，立即執行一次對應的 fetch，
+  而非等待下一個 interval tick。
+  實作：將 poll 邏輯抽出為獨立函式，selectGroup 呼叫後手動觸發。
+
+Fix 2（中優先）：修正 TOCTOU
+  在 poll 進入 fetch 前先捕捉當下的 key，fetch 完成後
+  直接使用該 key 呼叫 applyMessages，而非讓 applyMessages
+  重新從 ref 推算 curKey。
+  或：在 applyMessages 同時傳入「預期模式」做雙重驗證。
+
+Fix 3（中優先）：穩定 message ID fallback
+  將 fallback 改為不含 index：
+    `grp_${m.timestamp ?? Date.now()}_${Math.random().toString(36).slice(2)}`
+  或要求後端一定提供 message_id，前端 fallback 僅作警告日誌。
+
+Fix 4（低優先）：補上 URL encode
+  第 267 行改為：
+    fetch(`${baseUrl}/getGroupChat/${encodeURIComponent(groupName)}`, ...)
+
+================================================================
+相關檔案
+================================================================
+
+app/(tabs)/index.tsx
+  - applyMessages：第 218–226 行
+  - peer poll effect：第 229–257 行
+  - group poll effect：第 260–279 行
+  - rawGroupMsgToIMessage（fallback _id）：第 110–132 行
+  - rawPeerMsgToIMessage（fallback _id）：第 101–108 行
+  - selectGroup：第 196–203 行
+  - selectPeer：第 187–194 行
+
+app/context/MessagingContext.tsx
+  - GROUPS_POLL_MS = 10000（第 16 行）
+  - GROUP_POLL_INTERVAL_MS = 5000（index.tsx 第 34 行）
+
+================================================================

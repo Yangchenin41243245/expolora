@@ -1,0 +1,136 @@
+================================================================
+Group Member Display + Message Refresh Discrepancies
+驗證日期：2026-05-13
+分支：fixgroup_for_test
+================================================================
+
+## 背景
+
+本文件記錄 expolora 前端群組成員顯示與訊息刷新不一致問題的原始描述、
+程式碼逐項驗證結果，以及建議修復方向。
+
+================================================================
+問題清單（原始描述）
+================================================================
+
+1. 群組列表的成員計數僅依賴 /getGroups
+   - groupRooms 來自 /getGroups，若該 API 不包含 members，計數顯示 0 或舊值。
+
+2. 群組詳細 Modal 使用快照（snapshot）
+   - Modal 開啟時接收 room 物件，之後不重新綁定 context 更新狀態。
+   - 收到邀請或刷新後，Modal 成員列表仍顯示舊資料，直到關閉重開。
+
+3. 訊息刷新與群組 metadata 刷新脫鉤
+   - /getGroupChat 的 poll 僅更新聊天訊息，不更新 context 的 groupRooms。
+   - 刷新訊息後，列表與 Modal 的成員資訊仍然落後。
+
+4. MessagingContext 註解與後端實際行為不符
+   - 程式碼註解稱「members 目前後端不在 group_room 內」，
+     但後端 /getGroupChat 實際有回傳 group_room 物件（chat screen 已讀取 self_name）。
+   - 此誤導性註解造成 fetchOneGroup 回傳的 members 未被充分利用。
+
+================================================================
+程式碼驗證結果
+================================================================
+
+── 問題 1：group list counts 依賴 /getGroups ──────────────────
+
+檔案：app/context/MessagingContext.tsx
+- 第 223–239 行 refreshGroups()：
+    呼叫 /getGroups，將 json?.data?.groups 直接設為 groupRooms。
+    若後端 /getGroups 回傳的 group 物件不含 members 欄位，
+    groupRooms 內每個 room.members 就是 undefined。
+
+檔案：app/(tabs)/groups.tsx
+- 第 178 行 GroupRow：
+    const memberCount = item.members?.length ?? 0;
+    → 直接讀 groupRooms 的快照，完全沒有額外 fetch。
+
+結論：✅ 確認。計數正確與否完全取決於 /getGroups 是否回傳 members。
+
+── 問題 2：Detail Modal 使用快照 ─────────────────────────────
+
+檔案：app/(tabs)/groups.tsx
+- 第 197 行：
+    onPress={() => setScene({ type: 'detail', room: item })}
+    → item 是 FlatList 渲染當時的 groupRooms 元素，為靜態快照。
+
+- 第 352–378 行 scene.type === 'detail' 區塊：
+    <GroupDetailModal room={scene.room} ... />
+    → room prop 固定為開啟時的快照，不會隨 groupRooms 更新。
+
+- 第 687–838 行 GroupDetailModal：
+    元件只接收 room prop，內部無任何訂閱 context 或 re-fetch 邏輯。
+
+結論：✅ 確認。Modal 開著時 groupRooms 即使更新，Modal 不會反映。
+
+── 問題 3：訊息輪詢與群組 metadata 脫鉤 ──────────────────────
+
+檔案：app/(tabs)/index.tsx
+- 第 260–279 行群組 poll：
+    fetch(`${baseUrl}/getGroupChat/${groupName}`)
+    讀取 json?.data?.group_room?.self_name（第 271 行）用於訊息渲染，
+    但從未呼叫 refreshGroups() 或更新 context 的 groupRooms。
+
+- refreshGroups() 在 index.tsx 只出現於：
+    第 403 行 quickJoinGroup()（快速加入後才呼叫）。
+
+結論：✅ 確認。chat poll 與 groupRooms 更新為完全獨立的兩條路徑。
+
+── 問題 4：Context 註解與後端行為不符 ───────────────────────
+
+檔案：app/context/MessagingContext.tsx
+- 第 208–209 行 fetchOneGroup 內的註解：
+    「members 目前後端不在 group_room 內，若後端有補上則自動帶入」
+
+- 然而，index.tsx 第 271 行的 chat poll 已成功讀取：
+    json?.data?.group_room?.self_name
+    證明 /getGroupChat 確實回傳 group_room 物件。
+
+- 若後端也在 group_room 內放 members，fetchOneGroup 的
+    return (json?.data?.group_room as GroupRoom) ?? null
+    可自動帶入——但此函式目前僅在 registerGroup 時被呼叫，
+    chat poll 完全沒觸發它。
+
+結論：✅ 確認。註解過時，且 fetchOneGroup 的結果未在 poll 後被更新至 context。
+
+── 後端原始碼 ──────────────────────────────────────────────
+
+src/rns_app/api/routes.py 在本 repo 中不存在（為獨立後端 repo）。
+/getGroups 與 /getGroupChat 的 payload 結構需由後端 repo 或 curl 確認。
+
+================================================================
+影響範圍
+================================================================
+
+- 使用者在列表、Modal、聊天三個介面看到不一致的成員計數與名稱。
+- 邀請新成員後，列表與 Modal 不即時反映，需重啟 App 或關閉重開 Modal。
+- 聊天畫面的訊息刷新不能修正列表或 Modal 的落後狀態。
+
+================================================================
+建議修復方向（已選定）
+================================================================
+
+Option A + 輕量 Option C 混合：
+
+A. GroupDetailModal 開啟時 hydrate
+   - 開啟 Modal 時呼叫 fetchOneGroup(group_name)，
+     以最新的 group_room 覆蓋 scene.room 的 members。
+   - 利用現有 fetchOneGroup（已從 /getGroupChat 讀取），不新增 API。
+
+C（輕量）. refreshGroups 後同步 Modal
+   - refreshGroups 完成後，若 scene.type === 'detail'，
+     從最新 groupRooms 找到對應 room 並 setScene 更新。
+   - 一行 setScene，不需額外 fetch。
+
+額外：修正 MessagingContext.tsx 第 208–209 行的過時註解。
+
+================================================================
+待確認事項
+================================================================
+
+□ 後端 /getGroups 回傳的 group 物件是否包含 members 欄位？
+□ 後端 /getGroupChat 的 group_room 是否包含 members 欄位？
+□ 後端是否會將群組發起者（initiator）自動加入 members？
+
+================================================================
