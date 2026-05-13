@@ -25,7 +25,7 @@ const STORAGE_KEY_GROUPS = 'known_group_names'; // string[] — 已知群組名�
 export type LobbyPeer = {
   dest_hash: string;
   announced_name?: string;
-  custom_nickname?: string;
+  nickname?: string;
   is_saved_contact?: boolean;
   online?: boolean;
 };
@@ -45,7 +45,7 @@ export type GroupRoom = {
 // getGroupChat 完整回應裡的訊息型別
 export type GroupMessage = {
   message_id: string;
-  message_type: 'GROUP' | 'GROUP_INVITE' | 'GROUP_SYSTEM';
+  message_type: 'GROUP' | 'GROUP_INVITE' | 'GROUP_SYSTEM' | 'GROUP_JOIN';
   content?: string;
   from_hash?: string;
   from_name?: string;
@@ -62,6 +62,9 @@ type MessagingCtx = {
   baseUrl: string;
   setHost: (h: string) => void;
   setPort: (p: number) => void;
+
+  // 本機節點身份
+  localDestHash: string | null;
 
   // Lobby
   firstPeer: LobbyPeer | null;
@@ -92,6 +95,7 @@ const MessagingContext = createContext<MessagingCtx>({
   baseUrl: `http://${DEFAULT_HOST}:${DEFAULT_PORT}`,
   setHost: () => {},
   setPort: () => {},
+  localDestHash: null,
   firstPeer: null,
   lobbyPeers: [],
   groupRooms: [],
@@ -113,6 +117,7 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
   const [lobbyPeers, setLobbyPeers]   = useState<LobbyPeer[]>([]);
   const [groupRooms, setGroupRooms]   = useState<GroupRoom[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
+  const [localDestHash, setLocalDestHash] = useState<string | null>(null);
 
   // ref 供 interval callback 讀最新值，不需重建 interval
   const hostRef = useRef(host);
@@ -140,13 +145,35 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
   const setHost = useCallback((h: string) => {
     const trimmed = h.trim();
     setHostState(trimmed);
+    setLocalDestHash(null);
     AsyncStorage.setItem(STORAGE_KEY_HOST, trimmed).catch(() => {});
   }, []);
 
   const setPort = useCallback((p: number) => {
     setPortState(p);
+    setLocalDestHash(null);
     AsyncStorage.setItem(STORAGE_KEY_PORT, String(p)).catch(() => {});
   }, []);
+
+  // ── 本機身份：host/port 變更時重新抓取 ──────────────
+
+  useEffect(() => {
+    let cancelled = false;
+    setLocalDestHash(null);
+    const load = async () => {
+      try {
+        const res = await fetch(`http://${host}:${port}/identity`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        const hash = json?.destination_in?.hash;
+        if (hash && !cancelled) setLocalDestHash(hash as string);
+      } catch { /* 靜默失敗 */ }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [host, port]);
 
   // ── 讀取已知群組名稱清單 ─────────────────────────────
 
@@ -196,23 +223,20 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
   const refreshGroups = useCallback(async () => {
     setGroupsLoading(true);
     try {
-      const names = await loadKnownGroupNames();
-      const filteredNames = names.filter(n => !pendingRemoveRef.current.has(n));
-      if (filteredNames.length === 0) {
-        setGroupRooms([]);
-        return;
-      }
-      const results = await Promise.all(filteredNames.map(fetchOneGroup));
-      const valid = results.filter((r): r is GroupRoom => r !== null);
-      const survivingNames = filteredNames.filter((_, i) => results[i] !== null);
-      if (survivingNames.length !== filteredNames.length) {
-        await saveKnownGroupNames(survivingNames);
-      }
-      setGroupRooms(valid);
+      const res = await fetch(
+        `http://${hostRef.current}:${portRef.current}/getGroups`,
+        { headers: { Accept: 'application/json' } }
+      );
+      if (!res.ok) return;
+      const json = await res.json();
+      const rooms: GroupRoom[] = (json?.data?.groups ?? []) as GroupRoom[];
+      // 將後端群組清單同步回 AsyncStorage，解決重裝後名稱清單遺失的問題
+      await saveKnownGroupNames(rooms.map(r => r.group_name));
+      setGroupRooms(rooms.filter(r => !pendingRemoveRef.current.has(r.group_name)));
     } finally {
       setGroupsLoading(false);
     }
-  }, [loadKnownGroupNames, fetchOneGroup, saveKnownGroupNames]);
+  }, [saveKnownGroupNames]);
 
   // ── registerGroup：新增群組到已知清單並立即載入 ──────
 
@@ -259,7 +283,9 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
       );
       if (!res.ok) return;
       const json = await res.json();
-      setLobbyPeers(json?.data?.lobby ?? []);
+      const peers: LobbyPeer[] = json?.data?.lobby ?? [];
+      // 過濾掉顯示名稱為 "Unknown" 的節點（通常是自己的本地節點）
+      setLobbyPeers(peers.filter(p => (p.nickname || p.announced_name) !== 'Unknown'));
     } catch { /* 靜默失敗 */ }
   }, []);
 
@@ -290,6 +316,7 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
         baseUrl,
         setHost,
         setPort,
+        localDestHash,
         firstPeer,
         lobbyPeers,
         groupRooms,

@@ -23,7 +23,7 @@ import { useMessaging } from '../context/MessagingContext';
 type Contact = {
   dest_hash: string;
   announced_name?: string;
-  custom_nickname?: string;
+  nickname?: string;
   notes?: string;
   is_saved_contact?: boolean;
   online?: boolean;
@@ -117,7 +117,8 @@ export default function contacts() {
   const loadLobby = useCallback(async () => {
     try {
       const json = await apiFetch('/getLobby');
-      setLobbyPeers(json?.data?.lobby ?? []);
+      const peers: LobbyPeer[] = json?.data?.lobby ?? [];
+      setLobbyPeers(peers.filter(p => p.announced_name !== 'Unknown'));
     } catch { setLobbyPeers([]); }
   }, [apiFetch]);
 
@@ -178,7 +179,7 @@ export default function contacts() {
   // ── 渲染輔助 ────────────────────────────────────────────────────────────────
 
   const displayName = (c: Contact) =>
-    c.custom_nickname || c.announced_name || shortHash(c.dest_hash);
+    c.nickname || c.announced_name || shortHash(c.dest_hash);
 
   const onlineGlyph = (online?: boolean) =>
     online ? <View style={styles.dotOnline} /> : <View style={styles.dotOffline} />;
@@ -190,7 +191,7 @@ export default function contacts() {
       <View style={styles.rowLeft}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
-            {(item.custom_nickname || item.announced_name || '?')[0].toUpperCase()}
+            {(item.nickname || item.announced_name || '?')[0].toUpperCase()}
           </Text>
         </View>
         <View style={styles.rowInfo}>
@@ -436,7 +437,7 @@ type ContactDetailModalProps = {
 const ContactDetailModal: React.FC<ContactDetailModalProps> = ({
   contact, onClose, onEditNickname, onEditNote, onBlock, onRefresh,
 }) => {
-  const [nicknameEdit, setNicknameEdit] = useState(contact.custom_nickname ?? contact.announced_name ?? '');
+  const [nicknameEdit, setNicknameEdit] = useState(contact.nickname ?? contact.announced_name ?? '');
   const [noteEdit, setNoteEdit]         = useState(contact.notes ?? '');
   const [blockReason, setBlockReason]   = useState('');
   const [showBlock, setShowBlock]       = useState(false);
@@ -471,12 +472,12 @@ const ContactDetailModal: React.FC<ContactDetailModalProps> = ({
           <View style={styles.modalHeader}>
             <View style={styles.modalAvatar}>
               <Text style={styles.modalAvatarText}>
-                {(contact.custom_nickname || contact.announced_name || '?')[0].toUpperCase()}
+                {(contact.nickname || contact.announced_name || '?')[0].toUpperCase()}
               </Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.modalTitle}>
-                {contact.custom_nickname || contact.announced_name || '未命名'}
+                {contact.nickname || contact.announced_name || '未命名'}
               </Text>
               <Text style={styles.modalSub}>{contact.dest_hash}</Text>
             </View>

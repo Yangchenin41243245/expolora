@@ -1,0 +1,36 @@
+Web Stub — 暫停 Mapbox（僅 web 測試用）
+==========================================
+
+目的
+----
+@rnmapbox/maps 無 web 實作，模組載入本身就會在 web 上崩潰。
+以下兩個 platform extension stub 讓 Metro bundler 在 web 上
+自動繞過 Mapbox，不需修改任何現有檔案。
+
+Stub 檔案
+---------
+  utils/location.web.ts
+    - getCurrentLocation : 使用瀏覽器 navigator.geolocation
+    - ensureOfflineTiles : no-op
+    - ensureInitialOfflineMapTiles : 直接回傳 'cached'
+
+  components/LocationMessageBubble.web.tsx
+    - 以純文字座標取代 Mapbox MapView
+
+運作原理
+--------
+Metro 解析規則（優先順序高到低）：
+  .web.ts > .web.tsx  >  .ts > .tsx
+因此 web bundle 完全不碰 .ts 原始檔，@rnmapbox/maps 零接觸。
+
+不需修改的檔案
+--------------
+  app/_layout.tsx           — import utils/location → 自動解析 stub
+  app/(tabs)/index.tsx      — import LocationMessageBubble → 自動解析 stub
+  其餘所有既有檔案
+
+回復方式
+--------
+刪除以下兩個檔案，原始 native 行為完全恢復：
+  utils/location.web.ts
+  components/LocationMessageBubble.web.tsx

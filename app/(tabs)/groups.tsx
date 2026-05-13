@@ -325,13 +325,9 @@ export default function GroupsScreen() {
           lobbyPeers={lobbyPeers}
           onClose={() => setScene({ type: 'none' })}
           onCreate={async (group_name, self_name, members, invite_message) => {
-            try {
-              await createGroup(group_name, self_name, members, invite_message);
-              setScene({ type: 'none' });
-              await handleRefresh();
-            } catch (e: any) {
-              Alert.alert('建立失敗', e.message);
-            }
+            await createGroup(group_name, self_name, members, invite_message);
+            setScene({ type: 'none' });
+            await handleRefresh();
           }}
         />
       )}
@@ -426,6 +422,7 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   const [selectedHashes, setSelectedHashes] = useState<Set<string>>(new Set());
   const [displayNames, setDisplayNames]   = useState<Record<string, string>>({});
   const [loading, setLoading]             = useState(false);
+  const [errorMsg, setErrorMsg]           = useState('');
 
   const togglePeer = (dest_hash: string) => {
     setSelectedHashes(prev => {
@@ -436,15 +433,21 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   };
 
   const handleCreate = async () => {
-    if (!groupName.trim()) { Alert.alert('請填寫', '群組名稱不能空白'); return; }
-    if (!selfName.trim())  { Alert.alert('請填寫', '請輸入你在群組中的顯示名稱'); return; }
+    setErrorMsg('');
+    if (!groupName.trim()) { setErrorMsg('群組名稱不能空白'); return; }
+    if (!selfName.trim())  { setErrorMsg('請輸入你在群組中的顯示名稱'); return; }
     const members: GroupMember[] = [...selectedHashes].map(h => ({
       dest_hash: h,
       display_name: displayNames[h]?.trim() || undefined,
     }));
     setLoading(true);
-    try { await onCreate(groupName.trim(), selfName.trim(), members, inviteMsg.trim()); }
-    finally { setLoading(false); }
+    try {
+      await onCreate(groupName.trim(), selfName.trim(), members, inviteMsg.trim());
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? '建立失敗');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -519,7 +522,7 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               ) : (
                 lobbyPeers.map(peer => {
                   const selected = selectedHashes.has(peer.dest_hash);
-                  const name = peer.custom_nickname || peer.announced_name || shortHash(peer.dest_hash);
+                  const name = peer.nickname || peer.announced_name || shortHash(peer.dest_hash);
                   return (
                     <View key={peer.dest_hash}>
                       <TouchableOpacity
@@ -566,6 +569,10 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
                 : <Text style={styles.primaryBtnText}>◈ 建立群組並發送邀請</Text>
               }
             </TouchableOpacity>
+
+            {!!errorMsg && (
+              <Text style={styles.errorText}>{errorMsg}</Text>
+            )}
 
             <View style={{ height: 20 }} />
           </ScrollView>
@@ -920,7 +927,7 @@ const AddMembersModal: React.FC<AddMembersModalProps> = ({
               ) : (
                 available.map(peer => {
                   const selected = selectedHashes.has(peer.dest_hash);
-                  const name = peer.custom_nickname || peer.announced_name || shortHash(peer.dest_hash);
+                  const name = peer.nickname || peer.announced_name || shortHash(peer.dest_hash);
                   return (
                     <View key={peer.dest_hash}>
                       <TouchableOpacity
@@ -1242,4 +1249,9 @@ const styles = StyleSheet.create({
   },
   dangerBtnText: { color: '#e57373', fontSize: 13, fontFamily: 'monospace' },
   dangerHint:    { color: C.textMute, fontSize: 10, fontFamily: 'monospace', marginTop: 6, textAlign: 'center' },
+
+  errorText: {
+    color: '#e57373', fontSize: 12, fontFamily: 'monospace',
+    marginTop: 10, textAlign: 'center',
+  },
 });
