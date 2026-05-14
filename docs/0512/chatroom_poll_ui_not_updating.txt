@@ -160,16 +160,79 @@ Fix 4（低優先）：補上 URL encode
 ================================================================
 
 app/(tabs)/index.tsx
-  - applyMessages：第 218–226 行
-  - peer poll effect：第 229–257 行
-  - group poll effect：第 260–279 行
+  - applyMessages：第 186–194 行（修復後）
+  - pollPeer useCallback：第 197–218 行（新增）
+  - pollGroup useCallback：第 220–235 行（新增）
+  - selectPeer：第 239–249 行（修復後）
+  - selectGroup：第 251–261 行（修復後）
+  - peer poll interval effect：第 274–280 行（修復後）
+  - group poll interval effect：第 283–289 行（修復後）
   - rawGroupMsgToIMessage（fallback _id）：第 110–132 行
   - rawPeerMsgToIMessage（fallback _id）：第 101–108 行
-  - selectGroup：第 196–203 行
-  - selectPeer：第 187–194 行
 
 app/context/MessagingContext.tsx
   - GROUPS_POLL_MS = 10000（第 16 行）
   - GROUP_POLL_INTERVAL_MS = 5000（index.tsx 第 34 行）
+
+================================================================
+實作修復記錄（2026-05-14）
+================================================================
+
+修復分支：fixgroup_for_test
+Commit：28dfd35
+
+── Fix 1（高優先）：切換群組後立即 poll ──────────────────────
+
+檔案：app/(tabs)/index.tsx
+
+pollPeer / pollGroup 抽出為獨立 useCallback（deps: [baseUrl, applyMessages]）。
+selectPeer / selectGroup 切換後立即呼叫對應 poll，
+不再等待下一個 interval tick（最多縮短 4–5 秒延遲）。
+
+  const selectGroup = useCallback((name: string) => {
+    chatModeRef.current = 'group';      // ← 同步更新 ref（Fix 2）
+    selectedGroupRef.current = name;    // ← 同步更新 ref（Fix 2）
+    setChatMode('group');
+    setSelectedGroupName(name);
+    ...
+    void pollGroup();                   // ← 立即 fetch
+  }, [pollGroup]);
+
+interval effect 改為輕量版（僅負責定時觸發，不含 poll 邏輯）：
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (chatModeRef.current === 'group') void pollGroup();
+    }, GROUP_POLL_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [pollGroup]);
+
+── Fix 2（中優先）：消除 TOCTOU ref 競態 ─────────────────────
+
+selectPeer / selectGroup 在呼叫 poll 之前同步更新 chatModeRef 和
+selectedPeerRef / selectedGroupRef，確保 applyMessages 計算 curKey
+時 ref 已反映最新狀態，不會因 useEffect 延遲更新而 key 不符。
+
+── Fix 3（中優先）：穩定 message ID fallback ─────────────────
+
+rawPeerMsgToIMessage（第 103 行）：
+  舊：m.msg_id ?? `p2p_${idx}`
+  新：m.msg_id ?? [m.timestamp, m.from_hash?.slice(0,8),
+                   (m.content ?? '').slice(0,16)].join('_')
+
+rawGroupMsgToIMessage（第 121 行）：
+  舊：m.message_id ?? `grp_${idx}_${m.timestamp ?? idx}`
+  新：m.message_id ?? [m.timestamp, m.from_hash?.slice(0,8),
+                       (m.content ?? '').slice(0,16)].join('_')
+
+fallback ID 改為以內容特徵（timestamp + sender + content 前綴）組成，
+不含 index，確保同一則訊息在每次 poll 後 ID 一致。
+
+── Fix 4（低優先）：Group name URL encode ────────────────────
+
+pollGroup 內 fetch URL（第 226 行）：
+  舊：`${baseUrl}/getGroupChat/${groupName}`
+  新：`${baseUrl}/getGroupChat/${encodeURIComponent(groupName)}`
+
+與 peer poll 的 encodeURIComponent 處理保持一致。
 
 ================================================================

@@ -115,12 +115,18 @@ app/
 
 應用採用**輪詢（Polling）**而非 WebSocket，原因是後端為 Flask 同步架構。
 
-| 資料類型 | 間隔 | 觸發位置 |
-|----------|------|----------|
-| Lobby 節點 | 5,000 ms | MessagingContext |
-| 群組清單 | 10,000 ms | MessagingContext |
-| P2P 聊天訊息 | 4,000 ms | index.tsx |
-| 群組聊天訊息 | 5,000 ms | index.tsx |
+| 資料類型 | 間隔 | 觸發位置 | 備註 |
+|----------|------|----------|------|
+| Lobby 節點 | 5,000 ms | MessagingContext | 持續輪詢 |
+| 群組清單 | 10,000 ms | MessagingContext | 持續輪詢 |
+| P2P 聊天訊息 | 4,000 ms | index.tsx `pollPeer` | 切換節點時亦立即觸發 |
+| 群組聊天訊息 | 5,000 ms | index.tsx `pollGroup` | 切換群組時亦立即觸發 |
+
+### 立即觸發機制（2026-05-14 新增）
+
+`selectPeer` / `selectGroup` 切換對話目標時，除顯示快取訊息外，
+會同步更新 `chatModeRef` / `selectedPeerRef` / `selectedGroupRef`，
+並立即呼叫 `pollPeer()` / `pollGroup()`，消除原本最多 4–5 秒的初始延遲。
 
 ---
 
@@ -189,6 +195,36 @@ Web 平台透過 platform-specific 副檔名實現差異化：
 **根因**：節點廣播自身 Announce 時，自己也會聽到自己的廣播，因此出現在 Lobby。
 
 **修復方式**：`MessagingContext.fetchLobby` 與 `contacts.tsx` 的 `loadLobby` 均過濾掉 `announced_name === 'Unknown'` 的條目。
+
+---
+
+### 6. 群組詳細 Modal 顯示過期成員資訊（已修復，`28dfd35`）
+
+**現象**：點開群組詳細 Modal 後，成員列表不即時反映最新狀態；刷新群組清單後 Modal 仍顯示舊快照。
+
+**根因**：
+- `GroupRow` 的 `onPress` 以 `setScene({ type: 'detail', room: item })` 傳入快照，Modal 不訂閱 context 更新。
+- 群組列表從 `/getGroups` 取得，若該 API 不回傳 `members`，計數顯示為 0。
+
+**修復方式**（`groups.tsx`）：
+1. `onPress` 開啟 Modal 後立即呼叫 `fetchRoomDetail()` 以 `/getGroupChat/{name}` 的最新 `group_room` 覆蓋快照。
+2. 新增 `useEffect([groupRooms])`：`groupRooms` 每次輪詢更新時，自動同步已開啟 Modal 的 `room` 狀態。
+
+---
+
+### 7. 群組聊天畫面 poll 成功但 UI 不更新（已修復，`28dfd35`）
+
+**現象**：Poll 請求回傳新訊息，聊天畫面不重新渲染；切換房間後才顯示新訊息。
+
+**根因**：
+- `applyMessages` 以 ref 推算 `curKey`，fetch 期間若使用者切換模式，ref 已更新，`curKey` 與 poll 的 `key` 不符，`setMessages` 不執行（TOCTOU）。
+- poll effect deps 為 `[baseUrl, applyMessages]`，切換群組不重跑 effect，需等下一個 interval tick（最多 5 秒）。
+- message ID fallback 含陣列 index，後端插入新訊息後 index 偏移，GiftedChat 誤判重複訊息。
+
+**修復方式**（`index.tsx`）：
+1. `pollPeer` / `pollGroup` 抽為 useCallback，`selectPeer` / `selectGroup` 切換時同步更新 ref 並立即呼叫 poll，消除 TOCTOU 與初始延遲。
+2. message ID fallback 改為 `[timestamp, from_hash前8碼, content前16碼].join('_')`，不含 index。
+3. group poll URL 加上 `encodeURIComponent(groupName)`。
 
 ---
 

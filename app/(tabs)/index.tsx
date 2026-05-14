@@ -55,7 +55,7 @@ type RawGroupMsg = {
 };
 
 type RawPeerMsg = {
-  msg_id?: string;
+  message_id?: string;
   from_hash?: string;
   to_hash?: string;
   content?: string;
@@ -100,7 +100,7 @@ const withLocationPayload = <T extends LocationMessage>(message: T): T => {
 
 const rawPeerMsgToIMessage = (m: RawPeerMsg, _idx: number): LocationMessage => {
   return withLocationPayload({
-    _id:       m.msg_id ?? [m.timestamp, m.from_hash?.slice(0, 8), (m.content ?? '').slice(0, 16)].join('_'),
+    _id:       m.message_id ?? [m.timestamp, m.from_hash?.slice(0, 8), (m.content ?? '').slice(0, 16)].join('_'),
     text:      m.content ?? '',
     createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
     user:      { _id: m.status !== 'received' ? MY_USER_ID : BOT_USER_ID },
@@ -209,7 +209,7 @@ export default function ChatScreen() {
       }
       if (!res.ok) return;
       const json = await res.json();
-      const rawMsgs: RawPeerMsg[] = json?.data?.messages ?? [];
+      const rawMsgs: RawPeerMsg[] = json?.messages ?? json?.data?.messages ?? [];
       const converted = rawMsgs
         .filter(m => !isGroupPacket(m.content))
         .map((m, i) => rawPeerMsgToIMessage(m, i))

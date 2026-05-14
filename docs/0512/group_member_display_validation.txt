@@ -134,3 +134,63 @@ C（輕量）. refreshGroups 後同步 Modal
 □ 後端是否會將群組發起者（initiator）自動加入 members？
 
 ================================================================
+實作修復記錄（2026-05-14）
+================================================================
+
+修復分支：fixgroup_for_test
+Commit：28dfd35
+
+── Fix A：GroupDetailModal 開啟時 hydrate ────────────────────
+
+檔案：app/(tabs)/groups.tsx
+
+新增 fetchRoomDetail（第 127–139 行）：
+  const fetchRoomDetail = useCallback(async (group_name) => {
+    const res = await fetch(
+      `${baseUrl}/getGroupChat/${encodeURIComponent(group_name)}`,
+      { headers: { Accept: 'application/json' } }
+    );
+    return (json?.data?.group_room as GroupRoom) ?? null;
+  }, [baseUrl]);
+
+GroupRow onPress（第 213–228 行）改為兩階段：
+  1. 立即以快照開啟 Modal（UX 無延遲）
+  2. fetchRoomDetail 完成後以最新 group_room 覆蓋 scene.room
+  setScene(s =>
+    s.type === 'detail' && s.room.group_name === item.group_name
+      ? { type: 'detail', room: fresh }
+      : s
+  );
+
+── Fix C：groupRooms 更新時同步已開啟的 Modal ────────────────
+
+檔案：app/(tabs)/groups.tsx（第 104–111 行）
+
+新增 useEffect：
+  useEffect(() => {
+    setScene(prev => {
+      if (prev.type !== 'detail') return prev;
+      const updated = groupRooms.find(r => r.group_name === prev.room.group_name);
+      return updated ? { type: 'detail', room: updated } : prev;
+    });
+  }, [groupRooms]);
+
+  → groupRooms 每次 polling 更新後，自動將開啟中的 Modal
+    同步為最新 members / self_name / join_confirm。
+
+── Fix 額外：修正 MessagingContext 過時註解 ──────────────────
+
+檔案：app/context/MessagingContext.tsx（第 208 行）
+
+舊：// members 目前後端不在 group_room 內，若後端有補上則自動帶入
+新：// 後端回傳 data.group_room，包含 group_name / self_name / join_confirm / members
+
+================================================================
+待確認事項（修復後仍需後端驗證）
+================================================================
+
+□ 後端 /getGroups 回傳的 group 物件是否包含 members 欄位？
+□ 後端 /getGroupChat 的 group_room 是否包含 members 欄位？
+□ 後端是否會將群組發起者（initiator）自動加入 members？
+
+================================================================
