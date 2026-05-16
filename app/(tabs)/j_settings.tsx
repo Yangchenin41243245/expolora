@@ -1,5 +1,6 @@
 // filepath: app/(tabs)/j_settings.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Link } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -270,6 +271,16 @@ const j_settings: React.FC = () => {
           目前: {host}:{port}
         </Text>
       </View>
+
+      <Link href="/identity" asChild>
+        <TouchableOpacity style={styles.identityLinkRow}>
+          <View style={styles.identityLinkCopy}>
+            <Text style={styles.identityLinkTitle}>個別資訊</Text>
+            <Text style={styles.identityLinkMeta}>查看節點身份與訊息紀錄</Text>
+          </View>
+          <Text style={styles.identityLinkArrow}>›</Text>
+        </TouchableOpacity>
+      </Link>
 
       {activeTopTab === 'endpoint' && (
         <>
@@ -562,6 +573,16 @@ const styles = StyleSheet.create({
     fontSize: 13, fontFamily: 'monospace', borderWidth: 1, borderColor: '#E0E0E0',
   },
   contextNote: { color: '#999999', fontSize: 11, fontFamily: 'monospace', flex: 1 },
+  identityLinkRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 12, paddingVertical: 11,
+    backgroundColor: '#FFFFFF', borderTopWidth: 1, borderBottomWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  identityLinkCopy: { flex: 1, gap: 2 },
+  identityLinkTitle: { color: '#222222', fontSize: 14, fontWeight: '700' },
+  identityLinkMeta: { color: '#666666', fontSize: 12, fontFamily: 'monospace' },
+  identityLinkArrow: { color: '#0B6EFD', fontSize: 28, lineHeight: 28, marginLeft: 12 },
   groupRow: {
     flexDirection: 'row', backgroundColor: '#FFFFFF',
     paddingHorizontal: 10, paddingTop: 8, gap: 6,
