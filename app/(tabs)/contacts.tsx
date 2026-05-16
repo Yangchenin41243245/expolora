@@ -285,7 +285,7 @@ export default function contacts() {
               )}
               <TouchableOpacity style={styles.refreshIconBtn} onPress={refreshAll} disabled={loading}>
                 {loading
-                  ? <ActivityIndicator size="small" color="#4a90e2" />
+                  ? <ActivityIndicator size="small" color="#0B6EFD" />
                   : <Text style={styles.refreshIcon}>↻</Text>
                 }
               </TouchableOpacity>
@@ -509,7 +509,7 @@ const ContactDetailModal: React.FC<ContactDetailModalProps> = ({
                   value={nicknameEdit}
                   onChangeText={setNicknameEdit}
                   placeholder="輸入暱稱"
-                  placeholderTextColor="#3a3d4a"
+                  placeholderTextColor="#999999"
                 />
                 <TouchableOpacity
                   style={[styles.fieldBtn, saving === 'nickname' && styles.fieldBtnLoading]}
@@ -532,7 +532,7 @@ const ContactDetailModal: React.FC<ContactDetailModalProps> = ({
                 value={noteEdit}
                 onChangeText={setNoteEdit}
                 placeholder="輸入備註內容"
-                placeholderTextColor="#3a3d4a"
+                placeholderTextColor="#999999"
                 multiline
                 numberOfLines={3}
               />
@@ -562,7 +562,7 @@ const ContactDetailModal: React.FC<ContactDetailModalProps> = ({
                     value={blockReason}
                     onChangeText={setBlockReason}
                     placeholder="封鎖原因（選填）"
-                    placeholderTextColor="#3a3d4a"
+                    placeholderTextColor="#999999"
                   />
                   <View style={styles.dangerConfirmRow}>
                     <TouchableOpacity style={styles.cancelSmallBtn} onPress={() => setShowBlock(false)}>
@@ -730,7 +730,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                       value={nickname}
                       onChangeText={setNickname}
                       placeholder="自定義暱稱（選填）"
-                      placeholderTextColor="#3a3d4a"
+                      placeholderTextColor="#999999"
                     />
                   </View>
                   <View style={styles.fieldBlock}>
@@ -740,7 +740,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                       value={notes}
                       onChangeText={setNotes}
                       placeholder="備忘事項（選填）"
-                      placeholderTextColor="#3a3d4a"
+                      placeholderTextColor="#999999"
                       multiline
                       numberOfLines={3}
                     />
@@ -754,7 +754,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                     value={hideReason}
                     onChangeText={setHideReason}
                     placeholder="原因（選填）"
-                    placeholderTextColor="#3a3d4a"
+                    placeholderTextColor="#999999"
                   />
                 </View>
               )}
@@ -797,19 +797,19 @@ const InfoRow = ({ label, value, mono }: { label: string; value: string; mono?: 
 // ─────────────────────────────────────────────────────────────────────────────
 
 const C = {
-  bg:       '#0f1117',
-  surface:  '#1a1d27',
-  surface2: '#12141e',
-  border:   '#1e2130',
-  accent:   '#4a90e2',
-  accentDim:'#2a5298',
-  text:     '#e0e0e0',
-  textDim:  '#8a8d9a',
-  textMute: '#3a3d4a',
+  bg:       '#F6F6F6',
+  surface:  '#FFFFFF',
+  surface2: '#FFFFFF',
+  border:   '#E0E0E0',
+  accent:   '#0B6EFD',
+  accentDim:'#0B6EFD',
+  text:     '#222222',
+  textDim:  '#666666',
+  textMute: '#999999',
   danger:   '#c0392b',
-  dangerBg: '#2a1515',
-  green:    '#27ae60',
-  greenBg:  '#1a3320',
+  dangerBg: '#FDECEC',
+  green:    '#00A35C',
+  greenBg:  '#E8F5E9',
 };
 
 const styles = StyleSheet.create({
@@ -849,13 +849,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12, backgroundColor: C.bg,
   },
-  rowSaved:   { backgroundColor: '#0f1a2a' },
-  rowBlocked: { backgroundColor: '#160f0f' },
+  rowSaved:   { backgroundColor: '#F0F8FF' },
+  rowBlocked: { backgroundColor: '#FFF5F5' },
   rowLeft:    { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 },
   rowInfo:    { flex: 1 },
   rowNameLine:{ flexDirection: 'row', alignItems: 'center', gap: 6 },
   rowName:    { color: C.text, fontSize: 14, fontWeight: '600' },
-  rowNameBlocked: { color: '#8a3a3a', fontSize: 14, fontWeight: '600' },
+  rowNameBlocked: { color: '#C0392B', fontSize: 14, fontWeight: '600' },
   rowSub:     { color: C.textDim, fontSize: 11, fontFamily: 'monospace', marginTop: 2 },
   rowChevron: { color: C.textMute, fontSize: 20 },
   rowActions: { flexDirection: 'row', gap: 8 },
@@ -872,7 +872,7 @@ const styles = StyleSheet.create({
   avatarText:  { color: '#fff', fontSize: 18, fontWeight: '700' },
   avatarBlocked: {
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#2a1515', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: C.dangerBg, alignItems: 'center', justifyContent: 'center',
   },
   avatarBlockedText: { color: '#c0392b', fontSize: 18 },
 
@@ -881,8 +881,8 @@ const styles = StyleSheet.create({
   dotOffline: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.textMute },
 
   // ── 徽章 ──
-  badge:     { backgroundColor: '#1a3a2a', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeText: { color: '#5acd8a', fontSize: 11 },
+  badge:     { backgroundColor: C.greenBg, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeText: { color: '#1A6B3C', fontSize: 11 },
   badgeAdd:  { backgroundColor: C.accentDim, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
   badgeAddText: { color: '#fff', fontSize: 11 },
 
@@ -929,7 +929,7 @@ const styles = StyleSheet.create({
   fieldLabel: { color: C.textDim, fontSize: 11, fontFamily: 'monospace', marginBottom: 6, letterSpacing: 0.5 },
   fieldRow:   { flexDirection: 'row', gap: 8 },
   fieldInput: {
-    flex: 1, backgroundColor: '#12141e', color: C.text,
+    flex: 1, backgroundColor: C.surface, color: C.text,
     borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10,
     fontSize: 14, borderWidth: 1, borderColor: C.border,
   },
@@ -947,15 +947,15 @@ const styles = StyleSheet.create({
 
   // ── 危險區 ──
   dangerZone:     { marginTop: 8, borderTopWidth: 1, borderTopColor: C.border, paddingTop: 16 },
-  dangerLabel:    { color: '#7a3a3a', fontSize: 11, fontFamily: 'monospace', marginBottom: 10, letterSpacing: 0.5 },
-  dangerBtn:      { backgroundColor: C.dangerBg, borderRadius: 8, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: '#5a2020' },
-  dangerBtnText:  { color: '#e57373', fontSize: 14, fontWeight: '600' },
+  dangerLabel:    { color: '#C0392B', fontSize: 11, fontFamily: 'monospace', marginBottom: 10, letterSpacing: 0.5 },
+  dangerBtn:      { backgroundColor: C.dangerBg, borderRadius: 8, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: '#F4B7B7' },
+  dangerBtnText:  { color: '#C0392B', fontSize: 14, fontWeight: '600' },
   dangerConfirmRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   dangerConfirmBtn: { flex: 1, backgroundColor: C.danger, borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
 
   // ── 解封按鈕 ──
-  unblockBtn: { backgroundColor: C.greenBg, borderRadius: 8, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#2a6040' },
-  unblockBtnText: { color: '#5acd8a', fontSize: 14, fontWeight: '600' },
+  unblockBtn: { backgroundColor: C.greenBg, borderRadius: 8, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#A8DDB5' },
+  unblockBtnText: { color: '#1A6B3C', fontSize: 14, fontWeight: '600' },
 
   // ── 資訊區 ──
   infoBlock: { backgroundColor: C.surface2, borderRadius: 10, padding: 14, marginBottom: 16, gap: 10 },
@@ -968,7 +968,7 @@ const styles = StyleSheet.create({
   modeSwitch: { flexDirection: 'row', gap: 8, marginBottom: 20 },
   modeBtn:    { flex: 1, backgroundColor: C.surface2, borderRadius: 8, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: C.border },
   modeBtnActive: { backgroundColor: C.accentDim, borderColor: C.accent },
-  modeBtnDanger: { backgroundColor: '#2a1515', borderColor: '#5a2020' },
+  modeBtnDanger: { backgroundColor: C.dangerBg, borderColor: '#F4B7B7' },
   modeBtnText:   { color: C.textDim, fontSize: 13 },
   modeBtnTextActive: { color: '#fff' },
 
@@ -978,5 +978,5 @@ const styles = StyleSheet.create({
 
   // ── 已儲存提示 ──
   alreadySavedBox: { backgroundColor: C.greenBg, borderRadius: 10, padding: 16, marginBottom: 16, alignItems: 'center' },
-  alreadySavedText: { color: '#5acd8a', fontSize: 14 },
+  alreadySavedText: { color: '#1A6B3C', fontSize: 14 },
 });

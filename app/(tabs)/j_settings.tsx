@@ -306,7 +306,7 @@ const j_settings: React.FC = () => {
             <Text style={styles.statusText}>
               {current.lastUpdated ? `最後更新：${current.lastUpdated.toLocaleTimeString()}` : '尚未載入'}
             </Text>
-            {current.loading && <ActivityIndicator size="small" color="#4a90e2" />}
+            {current.loading && <ActivityIndicator size="small" color="#0B6EFD" />}
             <TouchableOpacity onPress={() => fetchEndpoint(activeEndpoint)}>
               <Text style={styles.refreshBtn}>↻ 刷新</Text>
             </TouchableOpacity>
@@ -408,7 +408,7 @@ const GroupDebugPanel: React.FC<GroupDebugPanelProps> = ({ state, onNameChange, 
         value={state.groupName}
         onChangeText={onNameChange}
         placeholder="輸入 group_name"
-        placeholderTextColor="#444"
+        placeholderTextColor="#999999"
         autoCapitalize="none"
         autoCorrect={false}
         onSubmitEditing={onFetch}
@@ -440,7 +440,7 @@ const GroupDebugPanel: React.FC<GroupDebugPanelProps> = ({ state, onNameChange, 
           ? `最後更新：${state.lastUpdated.toLocaleTimeString()}`
           : '尚未查詢'}
       </Text>
-      {state.loading && <ActivityIndicator size="small" color="#4a90e2" />}
+      {state.loading && <ActivityIndicator size="small" color="#0B6EFD" />}
     </View>
 
     {/* 結果區 */}
@@ -488,7 +488,7 @@ const GroupDebugSummary: React.FC<{ data: unknown }> = ({ data }) => {
       </View>
       <View style={styles.groupDbRow}>
         <Text style={styles.groupDbLabel}>join_confirm</Text>
-        <Text style={[styles.groupDbValue, { color: room?.join_confirm ? '#27ae60' : '#e2a84a' }]}>
+        <Text style={[styles.groupDbValue, { color: room?.join_confirm ? '#1A6B3C' : '#C68600' }]}>
           {String(room?.join_confirm ?? '—')}
         </Text>
       </View>
@@ -514,17 +514,17 @@ const GroupDebugSummary: React.FC<{ data: unknown }> = ({ data }) => {
 
 // ── 樣式 ───────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f1117' },
+  container: { flex: 1, backgroundColor: '#F6F6F6' },
   testSendRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 12, paddingVertical: 8,
-    backgroundColor: '#12141e', borderBottomWidth: 1, borderBottomColor: '#1e2130', gap: 8,
+    backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0', gap: 8,
   },
   testSendInfo: { flex: 1 },
-  testSendLabel: { color: '#aaa', fontSize: 12, fontFamily: 'monospace' },
-  testSendMeta: { color: '#555', fontSize: 11, fontFamily: 'monospace', marginTop: 1 },
+  testSendLabel: { color: '#666666', fontSize: 12, fontFamily: 'monospace' },
+  testSendMeta: { color: '#999999', fontSize: 11, fontFamily: 'monospace', marginTop: 1 },
   testSendBtn: {
-    backgroundColor: '#2a5298', borderRadius: 8,
+    backgroundColor: '#0B6EFD', borderRadius: 8,
     paddingHorizontal: 16, paddingVertical: 9, minWidth: 110, alignItems: 'center',
   },
   testSendBtnDisabled: { opacity: 0.4 },
@@ -533,133 +533,133 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 12, paddingVertical: 6, gap: 8,
   },
-  sendResultSuccess: { backgroundColor: '#1a3320' },
-  sendResultError: { backgroundColor: '#2a1515' },
-  sendResultText: { flex: 1, fontFamily: 'monospace', fontSize: 11, color: '#ccc' },
-  sendResultClose: { color: '#666', fontSize: 14, paddingLeft: 8 },
+  sendResultSuccess: { backgroundColor: '#E8F5E9' },
+  sendResultError: { backgroundColor: '#FDECEC' },
+  sendResultText: { flex: 1, fontFamily: 'monospace', fontSize: 11, color: '#222222' },
+  sendResultClose: { color: '#999999', fontSize: 14, paddingLeft: 8 },
   hostRow: {
     flexDirection: 'row', alignItems: 'center',
-    padding: 10, backgroundColor: '#1a1d27', gap: 8,
+    padding: 10, backgroundColor: '#FFFFFF', gap: 8,
   },
   hostInput: {
-    flex: 1, backgroundColor: '#252836', color: '#e0e0e0',
+    flex: 1, backgroundColor: '#FFFFFF', color: '#222222',
     borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6,
-    fontSize: 13, fontFamily: 'monospace',
+    fontSize: 13, fontFamily: 'monospace', borderWidth: 1, borderColor: '#E0E0E0',
   },
-  applyBtn: { backgroundColor: '#4a90e2', borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7 },
+  applyBtn: { backgroundColor: '#0B6EFD', borderRadius: 6, paddingHorizontal: 12, paddingVertical: 7 },
   applyBtnText: { color: '#fff', fontSize: 13 },
-  toggleBtn: { backgroundColor: '#333', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7 },
-  toggleBtnOn: { backgroundColor: '#2a7a2a' },
-  toggleBtnText: { color: '#fff', fontSize: 12 },
+  toggleBtn: { backgroundColor: '#E0E0E0', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7 },
+  toggleBtnOn: { backgroundColor: '#E8F5E9' },
+  toggleBtnText: { color: '#222222', fontSize: 12 },
   portRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 10, paddingBottom: 10, backgroundColor: '#1a1d27', gap: 8,
+    paddingHorizontal: 10, paddingBottom: 10, backgroundColor: '#FFFFFF', gap: 8,
   },
-  portLabel: { color: '#888', fontSize: 13, fontFamily: 'monospace', width: 36 },
+  portLabel: { color: '#666666', fontSize: 13, fontFamily: 'monospace', width: 36 },
   portInput: {
-    width: 80, backgroundColor: '#252836', color: '#e0e0e0',
+    width: 80, backgroundColor: '#FFFFFF', color: '#222222',
     borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6,
-    fontSize: 13, fontFamily: 'monospace',
+    fontSize: 13, fontFamily: 'monospace', borderWidth: 1, borderColor: '#E0E0E0',
   },
-  contextNote: { color: '#444', fontSize: 11, fontFamily: 'monospace', flex: 1 },
+  contextNote: { color: '#999999', fontSize: 11, fontFamily: 'monospace', flex: 1 },
   groupRow: {
-    flexDirection: 'row', backgroundColor: '#12141e',
+    flexDirection: 'row', backgroundColor: '#FFFFFF',
     paddingHorizontal: 10, paddingTop: 8, gap: 6,
   },
-  groupTab: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: '#1e2130' },
-  groupTabActive: { backgroundColor: '#4a90e2' },
-  groupTabText: { color: '#666', fontSize: 12, fontFamily: 'monospace' },
+  groupTab: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: '#F0F0F0' },
+  groupTabActive: { backgroundColor: '#0B6EFD' },
+  groupTabText: { color: '#666666', fontSize: 12, fontFamily: 'monospace' },
   groupTabTextActive: { color: '#fff', fontWeight: 'bold' },
   tabRow: {
-    flexDirection: 'row', backgroundColor: '#1a1d27',
-    borderBottomWidth: 1, borderBottomColor: '#2a2d3a', paddingTop: 4,
+    flexDirection: 'row', backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1, borderBottomColor: '#E0E0E0', paddingTop: 4,
   },
   tab: { flex: 1, paddingVertical: 9, alignItems: 'center' },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: '#4a90e2' },
-  tabText: { color: '#555', fontSize: 11, fontFamily: 'monospace' },
-  tabTextActive: { color: '#4a90e2' },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: '#0B6EFD' },
+  tabText: { color: '#666666', fontSize: 11, fontFamily: 'monospace' },
+  tabTextActive: { color: '#0B6EFD' },
   statusBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#151820',
+    paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#F0F0F0',
   },
-  statusText: { color: '#555', fontSize: 11 },
-  refreshBtn: { color: '#4a90e2', fontSize: 14 },
+  statusText: { color: '#666666', fontSize: 11 },
+  refreshBtn: { color: '#0B6EFD', fontSize: 14 },
   content: { flex: 1, padding: 12 },
   contentContainer: { paddingBottom: 80 },
-  emptyText: { color: '#555', textAlign: 'center', marginTop: 40 },
+  emptyText: { color: '#666666', textAlign: 'center', marginTop: 40 },
   errorBox: {
-    backgroundColor: '#2a1515', borderRadius: 8, padding: 16,
-    borderWidth: 1, borderColor: '#7a2a2a', marginTop: 20,
+    backgroundColor: '#FDECEC', borderRadius: 8, padding: 16,
+    borderWidth: 1, borderColor: '#F4B7B7', marginTop: 20,
   },
-  errorTitle: { color: '#e57373', fontSize: 16, marginBottom: 8 },
-  errorMsg: { color: '#ef9a9a', fontFamily: 'monospace', fontSize: 13 },
-  errorHint: { color: '#888', fontSize: 12, marginTop: 12, lineHeight: 20 },
-  jBracket: { color: '#d4d4d4', fontFamily: 'monospace', fontSize: 13 },
-  jKey: { color: '#9cdcfe', fontFamily: 'monospace', fontSize: 13 },
-  jStr: { color: '#ce9178', fontFamily: 'monospace', fontSize: 13 },
-  jNum: { color: '#b5cea8', fontFamily: 'monospace', fontSize: 13 },
-  jBool: { color: '#569cd6', fontFamily: 'monospace', fontSize: 13 },
-  jNull: { color: '#569cd6', fontFamily: 'monospace', fontSize: 13 },
+  errorTitle: { color: '#C0392B', fontSize: 16, marginBottom: 8 },
+  errorMsg: { color: '#C0392B', fontFamily: 'monospace', fontSize: 13 },
+  errorHint: { color: '#666666', fontSize: 12, marginTop: 12, lineHeight: 20 },
+  jBracket: { color: '#222222', fontFamily: 'monospace', fontSize: 13 },
+  jKey: { color: '#0B6EFD', fontFamily: 'monospace', fontSize: 13 },
+  jStr: { color: '#A44F00', fontFamily: 'monospace', fontSize: 13 },
+  jNum: { color: '#1A6B3C', fontFamily: 'monospace', fontSize: 13 },
+  jBool: { color: '#5A42B5', fontFamily: 'monospace', fontSize: 13 },
+  jNull: { color: '#5A42B5', fontFamily: 'monospace', fontSize: 13 },
   jRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
-  jPunct: { color: '#d4d4d4', fontFamily: 'monospace', fontSize: 13 },
+  jPunct: { color: '#222222', fontFamily: 'monospace', fontSize: 13 },
 
   // ── 頂部 Tab ──
   topTabRow: {
-    flexDirection: 'row', backgroundColor: '#0d0f18',
-    borderBottomWidth: 1, borderBottomColor: '#1e2130',
+    flexDirection: 'row', backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1, borderBottomColor: '#E0E0E0',
   },
   topTab: { flex: 1, paddingVertical: 10, alignItems: 'center' },
-  topTabActive: { borderBottomWidth: 2, borderBottomColor: '#4a90e2', backgroundColor: '#12141e' },
-  topTabText: { color: '#555', fontSize: 13, fontFamily: 'monospace' },
-  topTabTextActive: { color: '#4a90e2', fontWeight: '700' },
+  topTabActive: { borderBottomWidth: 2, borderBottomColor: '#0B6EFD', backgroundColor: '#FFFFFF' },
+  topTabText: { color: '#666666', fontSize: 13, fontFamily: 'monospace' },
+  topTabTextActive: { color: '#0B6EFD', fontWeight: '700' },
 
   // ── 群組 Debug ──
   groupDbInputRow: {
     flexDirection: 'row', alignItems: 'center',
-    padding: 10, backgroundColor: '#1a1d27',
-    borderBottomWidth: 1, borderBottomColor: '#1e2130', gap: 8,
+    padding: 10, backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1, borderBottomColor: '#E0E0E0', gap: 8,
   },
   groupDbInput: {
-    flex: 1, backgroundColor: '#252836', color: '#e0e0e0',
+    flex: 1, backgroundColor: '#FFFFFF', color: '#222222',
     borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7,
-    fontSize: 13, fontFamily: 'monospace',
+    fontSize: 13, fontFamily: 'monospace', borderWidth: 1, borderColor: '#E0E0E0',
   },
   groupDbFetchBtn: {
-    backgroundColor: '#4a90e2', borderRadius: 6,
+    backgroundColor: '#0B6EFD', borderRadius: 6,
     paddingHorizontal: 16, paddingVertical: 9, minWidth: 60, alignItems: 'center',
   },
   groupDbFetchText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   groupDbUrlHint: {
-    color: '#3a5a8a', fontSize: 11, fontFamily: 'monospace',
-    paddingHorizontal: 12, paddingVertical: 5, backgroundColor: '#0d0f18',
+    color: '#0B6EFD', fontSize: 11, fontFamily: 'monospace',
+    paddingHorizontal: 12, paddingVertical: 5, backgroundColor: '#F0F0F0',
   },
   groupDbSummaryBox: {
-    backgroundColor: '#12141e', borderRadius: 8, padding: 12,
-    borderWidth: 1, borderColor: '#1e2130', marginBottom: 16,
+    backgroundColor: '#FFFFFF', borderRadius: 8, padding: 12,
+    borderWidth: 1, borderColor: '#E0E0E0', marginBottom: 16,
   },
   groupDbSectionTitle: {
-    color: '#4a90e2', fontSize: 11, fontFamily: 'monospace',
+    color: '#0B6EFD', fontSize: 11, fontFamily: 'monospace',
     letterSpacing: 0.8, marginBottom: 8, textTransform: 'uppercase',
   },
   groupDbRow: {
     flexDirection: 'row', justifyContent: 'space-between',
-    paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: '#1e2130',
+    paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: '#E0E0E0',
   },
-  groupDbLabel: { color: '#556', fontSize: 12, fontFamily: 'monospace' },
-  groupDbValue: { color: '#9cdcfe', fontSize: 12, fontFamily: 'monospace' },
+  groupDbLabel: { color: '#666666', fontSize: 12, fontFamily: 'monospace' },
+  groupDbValue: { color: '#0B6EFD', fontSize: 12, fontFamily: 'monospace' },
   groupDbMsgRow: {
     flexDirection: 'row', gap: 8, paddingVertical: 4,
-    borderBottomWidth: 1, borderBottomColor: '#1e2130', alignItems: 'center',
+    borderBottomWidth: 1, borderBottomColor: '#E0E0E0', alignItems: 'center',
   },
   groupDbMsgType: {
-    color: '#ce9178', fontSize: 10, fontFamily: 'monospace',
+    color: '#A44F00', fontSize: 10, fontFamily: 'monospace',
     width: 90, flexShrink: 0,
   },
   groupDbMsgSender: {
-    color: '#4ec9b0', fontSize: 11, fontFamily: 'monospace',
+    color: '#1A6B3C', fontSize: 11, fontFamily: 'monospace',
     width: 70, flexShrink: 0,
   },
-  groupDbMsgContent: { color: '#d4d4d4', fontSize: 12, flex: 1 },
+  groupDbMsgContent: { color: '#222222', fontSize: 12, flex: 1 },
 });
 
 export default j_settings;

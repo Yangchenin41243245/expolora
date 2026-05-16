@@ -57,23 +57,23 @@ const shortHash = (h: string) => (h ? `${h.slice(0, 10)}…` : '—');
 // ── 顏色常數 ─────────────────────────────────────────────────────────────────
 
 const C = {
-  bg:       '#0f1117',
-  surface:  '#1a1d27',
-  surface2: '#12141e',
-  surface3: '#0d0f18',
-  border:   '#1e2130',
-  accent:   '#4a90e2',
-  accentDim:'#2a5298',
-  text:     '#e0e0e0',
-  textDim:  '#8a8d9a',
-  textMute: '#3a3d4a',
+  bg:       '#F6F6F6',
+  surface:  '#FFFFFF',
+  surface2: '#FFFFFF',
+  surface3: '#F0F0F0',
+  border:   '#E0E0E0',
+  accent:   '#0B6EFD',
+  accentDim:'#0B6EFD',
+  text:     '#222222',
+  textDim:  '#666666',
+  textMute: '#999999',
   danger:   '#c0392b',
-  dangerBg: '#2a1515',
-  dangerBorder: '#5a2020',
-  green:    '#27ae60',
-  greenBg:  '#1a3320',
-  greenBorder: '#2a6040',
-  yellow:   '#e2a84a',
+  dangerBg: '#FDECEC',
+  dangerBorder: '#F4B7B7',
+  green:    '#00A35C',
+  greenBg:  '#E8F5E9',
+  greenBorder: '#A8DDB5',
+  yellow:   '#C68600',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
   modeBtnText:       { color: C.textDim, fontSize: 13, fontWeight: '600' },
   modeBtnTextActive: { color: '#fff' },
   modeBtnHint:       { color: C.textMute, fontSize: 10, fontFamily: 'monospace', marginTop: 3 },
-  modeBtnHintActive: { color: 'rgba(255,255,255,0.55)' },
+  modeBtnHintActive: { color: 'rgba(255,255,255,0.75)' },
 
   // ── Hash 輸入 ──
   inputSection: { marginBottom: 14 },
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.dangerBorder,
   },
   clearBtnIcon: { fontSize: 14 },
-  clearBtnText: { color: '#e57373', fontSize: 13, fontWeight: '600' },
+  clearBtnText: { color: '#C0392B', fontSize: 13, fontWeight: '600' },
   btnLoading:   { opacity: 0.55 },
 
   // ── 錯誤 ──
@@ -512,8 +512,8 @@ const styles = StyleSheet.create({
     backgroundColor: C.dangerBg, borderRadius: 8, padding: 12,
     borderWidth: 1, borderColor: C.dangerBorder, marginBottom: 12,
   },
-  errorIcon: { color: '#e57373', fontSize: 15 },
-  errorText: { color: '#ef9a9a', fontSize: 13, flex: 1, fontFamily: 'monospace' },
+  errorIcon: { color: '#C0392B', fontSize: 15 },
+  errorText: { color: '#C0392B', fontSize: 13, flex: 1, fontFamily: 'monospace' },
 
   // ── 清除結果 ──
   clearResultBox: {
@@ -524,15 +524,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', marginBottom: 12,
   },
-  clearResultTitle: { color: '#5acd8a', fontSize: 15, fontWeight: '700' },
-  clearResultHash:  { color: '#2a7a4a', fontSize: 11, fontFamily: 'monospace' },
+  clearResultTitle: { color: '#1A6B3C', fontSize: 15, fontWeight: '700' },
+  clearResultHash:  { color: '#1A6B3C', fontSize: 11, fontFamily: 'monospace' },
   clearStatGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   clearStatCell: {
-    flex: 1, minWidth: '40%', backgroundColor: 'rgba(0,0,0,0.2)',
+    flex: 1, minWidth: '40%', backgroundColor: 'rgba(255,255,255,0.6)',
     borderRadius: 8, padding: 10, alignItems: 'center',
   },
-  clearStatValue: { color: '#5acd8a', fontSize: 22, fontWeight: '700', fontFamily: 'monospace' },
-  clearStatLabel: { color: '#2a7a4a', fontSize: 10, marginTop: 3, textAlign: 'center' },
+  clearStatValue: { color: '#1A6B3C', fontSize: 22, fontWeight: '700', fontFamily: 'monospace' },
+  clearStatLabel: { color: '#1A6B3C', fontSize: 10, marginTop: 3, textAlign: 'center' },
 
   // ── 查詢結果 Header ──
   resultHeader: {
@@ -621,13 +621,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12,
     borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  pickerRowActive: { backgroundColor: '#0f1a2a' },
+  pickerRowActive: { backgroundColor: '#EAF2FF' },
   pickerAvatar: {
     width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center',
   },
   avatarContact: { backgroundColor: '#1A6B3C' },
-  avatarUnknown: { backgroundColor: '#444' },
+  avatarUnknown: { backgroundColor: '#888888' },
   pickerAvatarText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   pickerInfo:   { flex: 1 },
   pickerNameRow:{ flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -635,7 +635,7 @@ const styles = StyleSheet.create({
   pickerHash:   { color: C.textDim, fontSize: 11, fontFamily: 'monospace', marginTop: 2 },
   pickerCheck:  { color: C.accent, fontSize: 18, fontWeight: '700' },
   tagContact: {
-    backgroundColor: '#1a3a2a', borderRadius: 6,
+    backgroundColor: C.greenBg, borderRadius: 6,
     paddingHorizontal: 5, paddingVertical: 1,
   },
   tagUnknown: {
@@ -643,11 +643,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5, paddingVertical: 1,
   },
   tagText: { color: C.textDim, fontSize: 10 },
-  rawJson: { color: '#d4d4d4', fontFamily: 'monospace', fontSize: 12, lineHeight: 18 },
+  rawJson: { color: C.text, fontFamily: 'monospace', fontSize: 12, lineHeight: 18 },
   copyBtn: {
-    alignSelf: 'flex-end', backgroundColor: '#1e2130',
+    alignSelf: 'flex-end', backgroundColor: '#EAF2FF',
     borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6,
-    marginBottom: 8, borderWidth: 1, borderColor: '#2a3050',
+    marginBottom: 8, borderWidth: 1, borderColor: '#CFE0FF',
   },
-  copyBtnText: { color: '#4a90e2', fontSize: 12, fontFamily: 'monospace' },
+  copyBtnText: { color: C.accent, fontSize: 12, fontFamily: 'monospace' },
 });

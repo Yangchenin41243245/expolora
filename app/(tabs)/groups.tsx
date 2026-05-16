@@ -25,25 +25,25 @@ import {
 // ── 顏色常數（與整體 App 一致）─────────────────────────────────────────────
 
 const C = {
-  bg:           '#0f1117',
-  surface:      '#1a1d27',
-  surface2:     '#12141e',
-  surface3:     '#0d0f18',
-  border:       '#1e2130',
-  accent:       '#4a90e2',
-  accentDim:    '#2a5298',
-  accentGlow:   'rgba(74,144,226,0.12)',
-  text:         '#e0e0e0',
-  textDim:      '#8a8d9a',
-  textMute:     '#3a3d4a',
+  bg:           '#F6F6F6',
+  surface:      '#FFFFFF',
+  surface2:     '#FFFFFF',
+  surface3:     '#F0F0F0',
+  border:       '#E0E0E0',
+  accent:       '#0B6EFD',
+  accentDim:    '#0B6EFD',
+  accentGlow:   '#EAF2FF',
+  text:         '#222222',
+  textDim:      '#666666',
+  textMute:     '#999999',
   danger:       '#c0392b',
-  dangerBg:     '#2a1515',
-  dangerBorder: '#5a2020',
-  green:        '#27ae60',
-  greenBg:      '#1a3320',
-  greenBorder:  '#2a6040',
-  yellow:       '#e2a84a',
-  yellowBg:     '#2a2010',
+  dangerBg:     '#FDECEC',
+  dangerBorder: '#F4B7B7',
+  green:        '#00A35C',
+  greenBg:      '#E8F5E9',
+  greenBorder:  '#A8DDB5',
+  yellow:       '#C68600',
+  yellowBg:     '#FFF8E1',
 };
 
 // ── 工具函式 ──────────────────────────────────────────────────────────────────
@@ -1066,8 +1066,8 @@ const styles = StyleSheet.create({
     width: 46, height: 46, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center', marginRight: 12,
   },
-  groupIconJoined:  { backgroundColor: '#1a3a2a' },
-  groupIconPending: { backgroundColor: '#2a2010' },
+  groupIconJoined:  { backgroundColor: C.greenBg },
+  groupIconPending: { backgroundColor: C.yellowBg },
   groupIconText: { color: C.text, fontSize: 20, fontWeight: '700', fontFamily: 'monospace' },
 
   groupInfo: { flex: 1 },
@@ -1090,11 +1090,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 3,
     borderWidth: 1, borderColor: C.greenBorder,
   },
-  badgeJoinedText: { color: '#5acd8a', fontSize: 10, fontFamily: 'monospace' },
+  badgeJoinedText: { color: '#1A6B3C', fontSize: 10, fontFamily: 'monospace' },
   badgePending: {
     backgroundColor: C.yellowBg, borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 3,
-    borderWidth: 1, borderColor: '#4a3a10',
+    borderWidth: 1, borderColor: '#F0D78A',
   },
   badgePendingText: { color: C.yellow, fontSize: 10, fontFamily: 'monospace' },
 
@@ -1175,7 +1175,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     borderWidth: 1, borderColor: C.border,
   },
-  peerPickRowSelected: { borderColor: C.accent, backgroundColor: '#0f1a2e' },
+  peerPickRowSelected: { borderColor: C.accent, backgroundColor: '#EAF2FF' },
   peerPickCheck: {
     width: 20, height: 20, borderRadius: 6,
     borderWidth: 1, borderColor: C.textMute,
@@ -1194,7 +1194,7 @@ const styles = StyleSheet.create({
     paddingLeft: 42, paddingBottom: 6,
   },
   displayNameInput: {
-    backgroundColor: '#0a0c14', color: C.text,
+    backgroundColor: C.surface, color: C.text,
     borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8,
     fontSize: 12, fontFamily: 'monospace',
     borderWidth: 1, borderColor: C.border,
@@ -1215,7 +1215,7 @@ const styles = StyleSheet.create({
   // ── 加入 Banner ──
   joinBanner: {
     backgroundColor: C.yellowBg, borderRadius: 10, padding: 14,
-    borderWidth: 1, borderColor: '#4a3a10', marginBottom: 16,
+    borderWidth: 1, borderColor: '#F0D78A', marginBottom: 16,
   },
   joinBannerText: { color: C.yellow, fontSize: 13, fontFamily: 'monospace' },
   joinBannerBtn:  { color: C.accent, fontSize: 13, marginTop: 8, fontWeight: '700' },
@@ -1271,7 +1271,7 @@ const styles = StyleSheet.create({
     borderTopColor: C.border, paddingTop: 16,
   },
   dangerLabel: {
-    color: '#7a3a3a', fontSize: 10, fontFamily: 'monospace',
+    color: '#C0392B', fontSize: 10, fontFamily: 'monospace',
     letterSpacing: 0.8, marginBottom: 10, textTransform: 'uppercase',
   },
   dangerBtn: {
@@ -1279,11 +1279,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12, alignItems: 'center',
     borderWidth: 1, borderColor: C.dangerBorder,
   },
-  dangerBtnText: { color: '#e57373', fontSize: 13, fontFamily: 'monospace' },
+  dangerBtnText: { color: '#C0392B', fontSize: 13, fontFamily: 'monospace' },
   dangerHint:    { color: C.textMute, fontSize: 10, fontFamily: 'monospace', marginTop: 6, textAlign: 'center' },
 
   errorText: {
-    color: '#e57373', fontSize: 12, fontFamily: 'monospace',
+    color: '#C0392B', fontSize: 12, fontFamily: 'monospace',
     marginTop: 10, textAlign: 'center',
   },
 });
