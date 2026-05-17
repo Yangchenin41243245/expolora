@@ -13,6 +13,10 @@ import {
   View,
 } from 'react-native';
 import { useMessaging } from '../context/MessagingContext';
+import {
+  checkAndSyncSystemTime,
+  type SystemTimeSyncResult,
+} from '../../utils/systemTime';
 
 // ── 設定區 ──────────────────────────────────────────────
 const POLL_INTERVAL_MS = 5000;
@@ -21,7 +25,7 @@ const TEST_IS_SAVED = false;
 // ────────────────────────────────────────────────────────
 
 const ENDPOINT_GROUPS = {
-  診斷: ['/status', '/identity', '/messages'],
+  診斷: ['/status', '/identity', '/messages', '/getSystemTime'],
   聯絡人: ['/getContactList', '/getBlocklist'],
   Lobby: ['/getLobby'],
 } as const;
@@ -33,9 +37,11 @@ const ALL_ENDPOINTS: Endpoint[] = Object.values(ENDPOINT_GROUPS).flat() as Endpo
 
 type FetchState = { data: unknown; loading: boolean; error: string | null; lastUpdated: Date | null };
 type SendState = { loading: boolean; result: unknown; error: string | null };
+type TimeSyncState = { loading: boolean; result: SystemTimeSyncResult | null; error: string | null };
 
 const initState = (): FetchState => ({ data: null, loading: false, error: null, lastUpdated: null });
 const initSendState = (): SendState => ({ loading: false, result: null, error: null });
+const initTimeSyncState = (): TimeSyncState => ({ loading: false, result: null, error: null });
 
 type GroupDebugState = {
   groupName: string;
@@ -48,7 +54,35 @@ const initGroupDebug = (): GroupDebugState => ({
   groupName: '', data: null, loading: false, error: null, lastUpdated: null,
 });
 
-const j_settings: React.FC = () => {
+const formatOffsetDuration = (absMs: number) => {
+  if (absMs < 1000) return '不到 1 秒';
+  if (absMs < 10000) return `${(absMs / 1000).toFixed(1)} 秒`;
+  if (absMs < 60000) return `${Math.round(absMs / 1000)} 秒`;
+
+  const minutes = Math.floor(absMs / 60000);
+  const seconds = Math.round((absMs % 60000) / 1000);
+  return seconds > 0 ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分`;
+};
+
+const describeTimeOffset = (offsetMs: number) => {
+  const absMs = Math.abs(offsetMs);
+  if (absMs < 1000) return '差不到 1 秒';
+  return `伺服器${offsetMs > 0 ? '快' : '慢'} ${formatOffsetDuration(absMs)}`;
+};
+
+const formatTimeSyncStatus = ({ loading, result, error }: TimeSyncState) => {
+  if (loading) return '正在讀取並同步 Raspberry Pi 系統時間...';
+  if (error) return `同步失敗：${error}`;
+  if (!result) return '使用手機時間同步 Raspberry Pi OS clock';
+
+  const checkedAt = new Date(result.checkedAtMs).toLocaleTimeString();
+  const offset = describeTimeOffset(result.offsetMs);
+  return result.synced
+    ? `已同步，原本${offset}（${checkedAt}）`
+    : `時間正常，${offset}（${checkedAt}）`;
+};
+
+const SettingsScreen: React.FC = () => {
   // ── 從 Context 讀取共享的 host/port ──────────────────
   const { host, port, setHost, setPort, firstPeer } = useMessaging();
 
@@ -70,6 +104,7 @@ const j_settings: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [sendState, setSendState] = useState<SendState>(initSendState());
+  const [timeSyncState, setTimeSyncState] = useState<TimeSyncState>(initTimeSyncState());
   const [groupDebug, setGroupDebug] = useState<GroupDebugState>(initGroupDebug());
   const [activeTopTab, setActiveTopTab] = useState<'endpoint' | 'group'>('endpoint');
 
@@ -140,6 +175,25 @@ const j_settings: React.FC = () => {
     setActiveGroup(group);
     setActiveEndpoint(ENDPOINT_GROUPS[group][0]);
   };
+
+  // ── 手動同步 Raspberry Pi OS 時鐘 ───────────────────
+  const handleManualTimeSync = useCallback(async () => {
+    setTimeSyncState({ loading: true, result: null, error: null });
+    try {
+      const result = await checkAndSyncSystemTime({
+        baseUrl: `http://${hostRef.current}:${portRef.current}`,
+        force: true,
+      });
+      setTimeSyncState({ loading: false, result, error: null });
+      void fetchEndpoint('/getSystemTime');
+    } catch (e: unknown) {
+      setTimeSyncState({
+        loading: false,
+        result: null,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }, [fetchEndpoint]);
 
   // ── 傳送測試訊息 ──────────────────────────────────────
   const firstPeerHash = firstPeer?.dest_hash ?? null;
@@ -272,6 +326,28 @@ const j_settings: React.FC = () => {
         </Text>
       </View>
 
+      <View style={styles.timeSyncRow}>
+        <View style={styles.timeSyncCopy}>
+          <Text style={styles.timeSyncTitle}>系統時間</Text>
+          <Text
+            style={[styles.timeSyncMeta, timeSyncState.error && styles.timeSyncMetaError]}
+            numberOfLines={2}
+          >
+            {formatTimeSyncStatus(timeSyncState)}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.timeSyncBtn, timeSyncState.loading && styles.timeSyncBtnDisabled]}
+          onPress={handleManualTimeSync}
+          disabled={timeSyncState.loading}
+        >
+          {timeSyncState.loading
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Text style={styles.timeSyncBtnText}>同步</Text>
+          }
+        </TouchableOpacity>
+      </View>
+
       <Link href="/identity" asChild>
         <TouchableOpacity style={styles.identityLinkRow}>
           <View style={styles.identityLinkCopy}>
@@ -366,7 +442,7 @@ const JsonViewer: React.FC<{ data: unknown; depth: number }> = ({ data, depth })
   if (data === null) return <Text style={[styles.jNull, { marginLeft: indent }]}>null</Text>;
   if (typeof data === 'boolean') return <Text style={[styles.jBool, { marginLeft: indent }]}>{data ? 'true' : 'false'}</Text>;
   if (typeof data === 'number') return <Text style={[styles.jNum, { marginLeft: indent }]}>{data}</Text>;
-  if (typeof data === 'string') return <Text style={[styles.jStr, { marginLeft: indent }]}>"{data}"</Text>;
+  if (typeof data === 'string') return <Text style={[styles.jStr, { marginLeft: indent }]}>{`"${data}"`}</Text>;
   if (Array.isArray(data)) {
     if (data.length === 0) return <Text style={[styles.jBracket, { marginLeft: indent }]}>[]</Text>;
     return (
@@ -573,6 +649,21 @@ const styles = StyleSheet.create({
     fontSize: 13, fontFamily: 'monospace', borderWidth: 1, borderColor: '#E0E0E0',
   },
   contextNote: { color: '#999999', fontSize: 11, fontFamily: 'monospace', flex: 1 },
+  timeSyncRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#FFFFFF',
+    borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E0E0E0', gap: 10,
+  },
+  timeSyncCopy: { flex: 1, gap: 2 },
+  timeSyncTitle: { color: '#222222', fontSize: 14, fontWeight: '700' },
+  timeSyncMeta: { color: '#666666', fontSize: 12, fontFamily: 'monospace', lineHeight: 17 },
+  timeSyncMetaError: { color: '#C0392B' },
+  timeSyncBtn: {
+    backgroundColor: '#0B6EFD', borderRadius: 6,
+    paddingHorizontal: 14, paddingVertical: 8, minWidth: 62, alignItems: 'center',
+  },
+  timeSyncBtnDisabled: { opacity: 0.5 },
+  timeSyncBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   identityLinkRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 12, paddingVertical: 11,
@@ -683,4 +774,4 @@ const styles = StyleSheet.create({
   groupDbMsgContent: { color: '#222222', fontSize: 12, flex: 1 },
 });
 
-export default j_settings;
+export default SettingsScreen;
