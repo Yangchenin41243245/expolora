@@ -19,13 +19,15 @@
 
 ### 使用的 API
 
-#### 讀取訊息（輪詢，每 4 秒）
+#### 讀取訊息（輪詢）
 
-| 場景 | 端點 | 說明 |
-|------|------|------|
-| 已儲存聯絡人 | `GET /getChat/{dest_hash}` | 回傳 `data.messages[]` |
-| 未儲存節點（404 fallback） | `GET /getDirectChat/{dest_hash}` | 回傳 `data.messages[]` |
-| 群組訊息（每 5 秒） | `GET /getGroupChat/{group_name}` | 回傳 `data.messages[]` + `data.group_room` |
+| 場景 | 端點 | 間隔 | 說明 |
+|------|------|------|------|
+| 已儲存聯絡人 | `GET /getChat/{dest_hash}` | 4,000 ms | 回傳 `data.messages[]` |
+| 未儲存節點（404 fallback） | `GET /getDirectChat/{dest_hash}` | 4,000 ms | 回傳 `data.messages[]` |
+| 群組訊息 | `GET /getGroupChat/{group_name}` | 5,000 ms | 回傳 `data.messages[]` + `data.group_room` |
+
+切換節點或群組時，除顯示快取訊息外，會**立即觸發一次 poll**，不等待下一個 interval tick。
 
 #### 發送訊息
 
@@ -126,6 +128,14 @@ LOCATION_MESSAGE_RE = /(?:📍\s*)?Location:\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:
 | 加入群組 | 輸入已知群組名稱與顯示名稱 |
 | 群組詳細 | 查看成員、修改顯示名稱、確認加入、新增成員、本地移除 |
 | 新增成員 | 從 Lobby 選取節點並發送邀請 |
+
+### 群組詳細 Modal 的資料更新機制
+
+開啟詳細 Modal 時採兩階段更新：
+1. 立即以 `groupRooms` 快照渲染（無延遲）
+2. 同時呼叫 `GET /getGroupChat/{group_name}` 取得最新 `group_room`，完成後覆蓋顯示
+
+此外，`groupRooms` 每次輪詢更新時（每 10 秒），若 Modal 仍開啟，會自動同步最新成員清單，無需關閉重開。
 
 ### 使用的 API
 

@@ -205,8 +205,7 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
         );
         if (!res.ok) return null;
         const json = await res.json();
-        // 後端回傳 data.group_room，包含 group_name / self_name / join_confirm
-        // members 目前後端不在 group_room 內，若後端有補上則自動帶入
+        // 後端回傳 data.group_room，包含 group_name / self_name / join_confirm / members
         return (json?.data?.group_room as GroupRoom) ?? null;
       } catch {
         return null;

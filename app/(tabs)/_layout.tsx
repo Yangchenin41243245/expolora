@@ -8,7 +8,15 @@ export default function TabLayout() {
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: '#007AFF',
-          tabBarInactiveTintColor: 'gray',
+          tabBarInactiveTintColor: '#666666',
+          headerStyle: { backgroundColor: '#FFFFFF' },
+          headerTintColor: '#222222',
+          headerTitleStyle: { color: '#222222' },
+          tabBarStyle: {
+            backgroundColor: '#FFFFFF',
+            borderTopColor: '#E0E0E0',
+          },
+          sceneStyle: { backgroundColor: '#F6F6F6' },
         }}
       >
         <Tabs.Screen
@@ -45,17 +53,14 @@ export default function TabLayout() {
           name="identity"
           options={{
             title: '個別資訊',
-            tabBarLabel: 'IDENTITY',
-            tabBarIcon: ({ color }) => (
-              <Text style={{ fontSize: 24, color }}>🧑‍🔧</Text>
-            ),
+            href: null,
           }}
         />
         <Tabs.Screen
           name="j_settings"
           options={{
             title: '設定',
-            tabBarLabel: 'JSON',
+            tabBarLabel: 'SETTINGS',
             tabBarIcon: ({ color }) => (
               <Text style={{ fontSize: 24, color }}>⚙️</Text>
             ),

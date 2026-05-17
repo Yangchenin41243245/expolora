@@ -197,9 +197,10 @@ type RawGroupMsg = {
 
 RNS 群組邀請與群組訊息以 JSON 字串形式透過點對點連線傳送，後端將其儲存在目標節點的直接訊息記錄（`rns_app_chats/{dest_hash}.json`）中。前端必須偵測並過濾這些封包，避免在 P2P 聊天介面顯示。
 
-### 辨識方式
+### 辨識與過濾流程
 
 ```typescript
+// 定義於 app/(tabs)/index.tsx（模組層級，非 React hook）
 const isGroupPacket = (content?: string): boolean => {
   if (!content) return false;
   try {
@@ -208,6 +209,24 @@ const isGroupPacket = (content?: string): boolean => {
   } catch { return false; }
 };
 ```
+
+**過濾發生的位置**：僅在 `pollPeer`（P2P 訊息輪詢，`index.tsx:213–214`）套用：
+
+```typescript
+const converted = rawMsgs
+  .filter(m => !isGroupPacket(m.content))   // ← 過濾群組封包
+  .map((m, i) => rawPeerMsgToIMessage(m, i))
+  .reverse();
+```
+
+**過濾邏輯**：
+- `content` 為空或非字串 → `false`（保留訊息）
+- `JSON.parse` 失敗（純文字訊息）→ `false`（保留訊息）
+- 解析後物件存在 `category === "group"` → `true`（過濾掉）
+
+**不過濾的場合**：
+- `pollGroup`（群組訊息輪詢）不套用此過濾，因為 `/getGroupChat` 回傳的訊息已是群組訊息格式，不會混入群組控制封包。
+- `sendLocation` / `onSend` 發送路徑不涉及此函式。
 
 ### 邀請封包（`action: "invite"`）
 

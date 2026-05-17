@@ -1,7 +1,7 @@
 name: Build Preview Android APK
 on:
   push:
-    branches: [ main, dev_0512 ]
+    branches: [ main ]
     paths:
       - 'app/**'
       - 'components/**'
