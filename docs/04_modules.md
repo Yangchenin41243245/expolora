@@ -1,6 +1,6 @@
 # 第三方模組列表
 
-版本資訊來源：`package.json`（expolora v1.0.2）
+版本資訊來源：`package.json`（expolora v1.0.3）
 
 ---
 
