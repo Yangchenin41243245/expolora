@@ -8,12 +8,15 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { checkAndSyncSystemTime } from '../../utils/systemTime';
 
 // ── 預設值 ────────────────────────────────────────────
 export const DEFAULT_HOST = 'rns-chat.local';
 export const DEFAULT_PORT = 5000;
 const LOBBY_POLL_MS  = 5000;
 const GROUPS_POLL_MS = 10000;
+const STARTUP_TIME_SYNC_RETRY_MS = 5000;
+const STARTUP_TIME_SYNC_MAX_ATTEMPTS = 5;
 
 // AsyncStorage keys
 const STORAGE_KEY_HOST   = 'saved_host';
@@ -118,6 +121,7 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
   const [groupRooms, setGroupRooms]   = useState<GroupRoom[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [localDestHash, setLocalDestHash] = useState<string | null>(null);
+  const [connectionSettingsLoaded, setConnectionSettingsLoaded] = useState(false);
 
   // ref 供 interval callback 讀最新值，不需重建 interval
   const hostRef = useRef(host);
@@ -137,8 +141,40 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
         if (savedHost) setHostState(savedHost);
         if (savedPort) setPortState(Number(savedPort));
       } catch { /* ignore */ }
+      finally {
+        setConnectionSettingsLoaded(true);
+      }
     })();
   }, []);
+
+  // ── 啟動時校正 Raspberry Pi OS 時鐘 ──────────────────
+
+  useEffect(() => {
+    if (!connectionSettingsLoaded) return;
+
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const baseUrl = `http://${host}:${port}`;
+    let attempts = 0;
+
+    const run = async () => {
+      attempts += 1;
+      try {
+        await checkAndSyncSystemTime({ baseUrl });
+      } catch {
+        if (!cancelled && attempts < STARTUP_TIME_SYNC_MAX_ATTEMPTS) {
+          retryTimer = setTimeout(run, STARTUP_TIME_SYNC_RETRY_MS);
+        }
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [connectionSettingsLoaded, host, port]);
 
   // ── setHost / setPort（外部呼叫，同步寫 AsyncStorage）──
 
