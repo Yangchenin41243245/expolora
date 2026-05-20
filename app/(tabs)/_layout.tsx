@@ -20,19 +20,9 @@ export default function TabLayout() {
         }}
       >
         <Tabs.Screen
-          name="index"
-          options={{
-            title: 'SNS對話',
-            tabBarLabel: 'CHAT',
-            tabBarIcon: ({ color }) => (
-              <Text style={{ fontSize: 24, color }}>💬</Text>
-            ),
-          }}
-        />
-        <Tabs.Screen
           name="contacts"
           options={{
-            title: '聯絡人',
+            title: '聯絡介面',
             tabBarLabel: 'CONTACTS',
             tabBarIcon: ({ color }) => (
               <Text style={{ fontSize: 24, color }}>🏠</Text>
@@ -41,19 +31,23 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="groups"
-          options={{
-            title: '群組',
-            tabBarLabel: 'GROUPS',
-            tabBarIcon: ({ color }) => (
-              <Text style={{ fontSize: 24, color }}>👥</Text>
-            ),
-          }}
+          options={{ href: null }}
         />
         <Tabs.Screen
           name="identity"
           options={{
             title: '個別資訊',
             href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: '通訊頁面',
+            tabBarLabel: 'CHAT',
+            tabBarIcon: ({ color }) => (
+              <Text style={{ fontSize: 24, color }}>💬</Text>
+            ),
           }}
         />
         <Tabs.Screen

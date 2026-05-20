@@ -1,6 +1,7 @@
 // filepath: app/(tabs)/index.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { Tabs, router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -258,6 +259,22 @@ export default function ChatScreen() {
     setMessages(chatStatesRef.current[key]?.messages ?? []);
     void pollGroup();
   }, [pollGroup]);
+
+  // ── 從 contacts tab 導航過來時自動選取目標 ───────────────────────────────
+  const { dest_hash: navDestHash, group_name: navGroupName } =
+    useLocalSearchParams<{ dest_hash?: string; group_name?: string }>();
+
+  useEffect(() => {
+    if (!navDestHash) return;
+    selectPeer(String(navDestHash));
+    router.setParams({ dest_hash: '' });
+  }, [navDestHash, selectPeer]);
+
+  useEffect(() => {
+    if (!navGroupName) return;
+    selectGroup(String(navGroupName));
+    router.setParams({ group_name: '' });
+  }, [navGroupName, selectGroup]);
 
   // ── baseUrl 變更時全部重置 ────────────────────────────────────────────────
   const prevBaseUrl = useRef(baseUrl);
@@ -526,7 +543,7 @@ export default function ChatScreen() {
   };
 
   const inputPlaceholder = () => {
-    if (!chatMode)   return '請先從上方選擇節點或群組';
+    if (!chatMode)   return '請先從上方選擇使用者或群組';
     if (joinPending) return '請先加入此群組';
     if (isGroupMode) return `傳送至 ${selectedGroupName}`;
     return '輸入訊息';
@@ -534,23 +551,41 @@ export default function ChatScreen() {
 
   // ── Header：左側節點下拉 / 右側群組下拉 ──────────────────────────────────
 
-  const peerBtnLabel = chatMode === 'peer' && currentPeer
+  const peerSubLabel = chatMode === 'peer' && currentPeer
     ? (currentPeer.nickname || currentPeer.announced_name || shortHash(currentPeer.dest_hash))
-    : '節點';
+    : '— 未選取 —';
 
-  const groupBtnLabel = chatMode === 'group' && currentGroup
+  const groupSubLabel = chatMode === 'group' && currentGroup
     ? currentGroup.group_name
-    : '群組';
+    : '— 未選取 —';
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
+      <Tabs.Screen
+        options={{
+          headerTitle: () => {
+            const isOnline = chatMode === 'peer' && !!currentPeer?.online;
+            const dotColor = chatMode === 'peer'
+              ? (isOnline ? '#00C853' : '#BBBBBB')
+              : chatMode === 'group' ? '#0B6EFD' : 'transparent';
+            const dotRadius = chatMode === 'group' ? 2 : 4;
+            const label = chatMode === 'peer' ? '個人對話' : chatMode === 'group' ? '群組' : '通訊頁面';
+            return (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                <View style={{ width: 8, height: 8, borderRadius: dotRadius, backgroundColor: dotColor }} />
+                <Text style={{ fontSize: 17, fontWeight: '700', color: '#222222' }}>{label}</Text>
+              </View>
+            );
+          },
+        }}
+      />
       <StatusBar barStyle="dark-content" backgroundColor="#F6F6F6" />
 
       {/* ── Header ── */}
       <View style={styles.header}>
 
-        {/* 節點下拉區塊 */}
+        {/* 個人對話 */}
         <View style={styles.dropWrapper}>
           <TouchableOpacity
             style={[styles.dropBtn, chatMode === 'peer' && styles.dropBtnPeerActive]}
@@ -561,9 +596,12 @@ export default function ChatScreen() {
               styles.statusDot,
               currentPeer?.online ? styles.dotOnline : styles.dotOffline,
             ]} />
-            <Text style={[styles.dropBtnText, chatMode === 'peer' && styles.dropBtnPeerText]} numberOfLines={1}>
-              {peerBtnLabel}
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.modeBtnTitle, chatMode === 'peer' && styles.modeBtnTitlePeer]}>
+                個人對話
+              </Text>
+              <Text style={styles.modeBtnSub} numberOfLines={1}>{peerSubLabel}</Text>
+            </View>
             <Text style={styles.dropChevron}>{peerDropOpen ? '▲' : '▾'}</Text>
           </TouchableOpacity>
 
@@ -571,7 +609,7 @@ export default function ChatScreen() {
             <View style={styles.dropList}>
               {lobbyPeers.length === 0 ? (
                 <View style={styles.dropEmpty}>
-                  <Text style={styles.dropEmptyText}>Lobby 中無活躍節點</Text>
+                  <Text style={styles.dropEmptyText}>區域中無活躍使用者</Text>
                 </View>
               ) : (
                 <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
@@ -619,9 +657,12 @@ export default function ChatScreen() {
             activeOpacity={0.75}
           >
             <View style={styles.groupSquare} />
-            <Text style={[styles.dropBtnText, chatMode === 'group' && styles.dropBtnGroupText]} numberOfLines={1}>
-              {groupBtnLabel}
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.modeBtnTitle, chatMode === 'group' && styles.modeBtnTitleGroup]}>
+                群組
+              </Text>
+              <Text style={styles.modeBtnSub} numberOfLines={1}>{groupSubLabel}</Text>
+            </View>
             <Text style={styles.dropChevron}>{groupDropOpen ? '▲' : '▾'}</Text>
           </TouchableOpacity>
 
@@ -691,7 +732,7 @@ export default function ChatScreen() {
           renderActions={renderActions}
           messagesContainerStyle={{ backgroundColor: isGroupMode ? '#E8EFF8' : '#E5DDD5' }}
           keyboardAvoidingViewProps={{
-            keyboardVerticalOffset: headerHeight + 52,
+            keyboardVerticalOffset: headerHeight + 66,
           }}
           textInputProps={{
             placeholder: inputPlaceholder(),
@@ -776,7 +817,7 @@ const styles = StyleSheet.create({
 
   // ── Header ──
   header: {
-    height: 52,
+    height: 66,
     backgroundColor: '#F6F6F6',
     flexDirection: 'row',
     alignItems: 'center',
@@ -812,6 +853,12 @@ const styles = StyleSheet.create({
   dropBtnPeerText:    { color: '#1A6B3C' },
   dropBtnGroupText:   { color: '#0B4FA8' },
   dropChevron:        { fontSize: 10, color: '#999' },
+
+  // ── 模式標題（個人對話 / 群組）──
+  modeBtnTitle:      { fontSize: 13, fontWeight: '700', color: '#999', letterSpacing: 0.2 },
+  modeBtnTitlePeer:  { color: '#1A6B3C' },
+  modeBtnTitleGroup: { color: '#0B4FA8' },
+  modeBtnSub:        { fontSize: 12, color: '#555', marginTop: 1 },
 
   // ── 狀態點 ──
   statusDot:  { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
