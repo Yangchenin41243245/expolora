@@ -1,12 +1,12 @@
 // filepath: app/(tabs)/index.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { Tabs, router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Modal,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -153,10 +153,6 @@ export default function ChatScreen() {
   const [selectedPeerHash, setSelectedPeerHash]   = useState<string | null>(null);
   const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
 
-  // 下拉面板開關
-  const [peerDropOpen, setPeerDropOpen]   = useState(false);
-  const [groupDropOpen, setGroupDropOpen] = useState(false);
-
   // ── 訊息快取 ──────────────────────────────────────────────────────────────
   const chatStatesRef = useRef<Record<string, ChatState>>({});
   const [messages, setMessages] = useState<LocationMessage[]>([]);
@@ -164,6 +160,9 @@ export default function ChatScreen() {
 
   // ── 加入確認 Modal ────────────────────────────────────────────────────────
   const [showJoinModal, setShowJoinModal] = useState(false);
+
+  // ── 群組成員選單 ──────────────────────────────────────────────────────────
+  const [showMemberMenu, setShowMemberMenu] = useState(false);
 
   // ── ref：供非同步回調讀取最新狀態，不觸發 effect ─────────────────────────
   const chatModeRef      = useRef<ChatMode>(null);
@@ -240,8 +239,6 @@ export default function ChatScreen() {
     selectedPeerRef.current = hash;
     setChatMode('peer');
     setSelectedPeerHash(hash);
-    setPeerDropOpen(false);
-    setGroupDropOpen(false);
     const key = `peer:${hash}`;
     setMessages(chatStatesRef.current[key]?.messages ?? []);
     void pollPeer();
@@ -252,12 +249,26 @@ export default function ChatScreen() {
     selectedGroupRef.current = name;
     setChatMode('group');
     setSelectedGroupName(name);
-    setPeerDropOpen(false);
-    setGroupDropOpen(false);
     const key = `group:${name}`;
     setMessages(chatStatesRef.current[key]?.messages ?? []);
     void pollGroup();
   }, [pollGroup]);
+
+  // ── 從 contacts tab 導航過來時自動選取目標 ───────────────────────────────
+  const { dest_hash: navDestHash, group_name: navGroupName } =
+    useLocalSearchParams<{ dest_hash?: string; group_name?: string }>();
+
+  useEffect(() => {
+    if (!navDestHash) return;
+    selectPeer(String(navDestHash));
+    router.setParams({ dest_hash: '' });
+  }, [navDestHash, selectPeer]);
+
+  useEffect(() => {
+    if (!navGroupName) return;
+    selectGroup(String(navGroupName));
+    router.setParams({ group_name: '' });
+  }, [navGroupName, selectGroup]);
 
   // ── baseUrl 變更時全部重置 ────────────────────────────────────────────────
   const prevBaseUrl = useRef(baseUrl);
@@ -526,154 +537,82 @@ export default function ChatScreen() {
   };
 
   const inputPlaceholder = () => {
-    if (!chatMode)   return '請先從上方選擇節點或群組';
+    if (!chatMode)   return '請先從上方選擇使用者或群組';
     if (joinPending) return '請先加入此群組';
     if (isGroupMode) return `傳送至 ${selectedGroupName}`;
     return '輸入訊息';
   };
 
-  // ── Header：左側節點下拉 / 右側群組下拉 ──────────────────────────────────
-
-  const peerBtnLabel = chatMode === 'peer' && currentPeer
-    ? (currentPeer.nickname || currentPeer.announced_name || shortHash(currentPeer.dest_hash))
-    : '節點';
-
-  const groupBtnLabel = chatMode === 'group' && currentGroup
-    ? currentGroup.group_name
-    : '群組';
+  useEffect(() => { if (chatMode !== 'group') setShowMemberMenu(false); }, [chatMode]);
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
+      <Tabs.Screen
+        options={{
+          headerRight: chatMode === 'group' ? () => (
+            <TouchableOpacity
+              style={{ marginRight: 14, padding: 4 }}
+              onPress={() => setShowMemberMenu(v => !v)}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="people"
+                size={22}
+                color={showMemberMenu ? '#0B6EFD' : '#555'}
+              />
+            </TouchableOpacity>
+          ) : undefined,
+          headerTitle: () => {
+            const isOnline = chatMode === 'peer' && !!currentPeer?.online;
+            const dotColor = chatMode === 'peer'
+              ? (isOnline ? '#00C853' : '#BBBBBB')
+              : chatMode === 'group' ? '#0B6EFD' : 'transparent';
+            const dotRadius = chatMode === 'group' ? 2 : 4;
+            const label = chatMode === 'peer' && currentPeer
+              ? (currentPeer.nickname || currentPeer.announced_name || shortHash(currentPeer.dest_hash))
+              : chatMode === 'group' && currentGroup
+              ? currentGroup.group_name
+              : 'SNS對話';
+            return (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                <View style={{ width: 8, height: 8, borderRadius: dotRadius, backgroundColor: dotColor }} />
+                <Text style={{ fontSize: 17, fontWeight: '700', color: '#222222' }}>{label}</Text>
+              </View>
+            );
+          },
+        }}
+      />
       <StatusBar barStyle="dark-content" backgroundColor="#F6F6F6" />
 
-      {/* ── Header ── */}
-      <View style={styles.header}>
-
-        {/* 節點下拉區塊 */}
-        <View style={styles.dropWrapper}>
+      {/* ── 群組成員選單 ── */}
+      {showMemberMenu && chatMode === 'group' && currentGroup && (
+        <>
           <TouchableOpacity
-            style={[styles.dropBtn, chatMode === 'peer' && styles.dropBtnPeerActive]}
-            onPress={() => { setPeerDropOpen(v => !v); setGroupDropOpen(false); }}
-            activeOpacity={0.75}
-          >
-            <View style={[
-              styles.statusDot,
-              currentPeer?.online ? styles.dotOnline : styles.dotOffline,
-            ]} />
-            <Text style={[styles.dropBtnText, chatMode === 'peer' && styles.dropBtnPeerText]} numberOfLines={1}>
-              {peerBtnLabel}
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={0}
+            onPress={() => setShowMemberMenu(false)}
+          />
+          <View style={styles.memberMenu}>
+            <Text style={styles.memberMenuTitle}>
+              {currentGroup.group_name}  ·  {(currentGroup.members ?? []).length} 人
             </Text>
-            <Text style={styles.dropChevron}>{peerDropOpen ? '▲' : '▾'}</Text>
-          </TouchableOpacity>
-
-          {peerDropOpen && (
-            <View style={styles.dropList}>
-              {lobbyPeers.length === 0 ? (
-                <View style={styles.dropEmpty}>
-                  <Text style={styles.dropEmptyText}>Lobby 中無活躍節點</Text>
-                </View>
-              ) : (
-                <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-                  {lobbyPeers.map((peer, idx) => {
-                    const isSel = peer.dest_hash === selectedPeerHash && chatMode === 'peer';
-                    const name  = peer.nickname || peer.announced_name || shortHash(peer.dest_hash);
-                    return (
-                      <TouchableOpacity
-                        key={peer.dest_hash}
-                        style={[
-                          styles.dropRow,
-                          isSel && styles.dropRowSelected,
-                          idx > 0 && styles.dropRowBorder,
-                        ]}
-                        onPress={() => selectPeer(peer.dest_hash)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={[styles.dropAvatar, peer.is_saved_contact ? styles.avatarSaved : styles.avatarUnknown]}>
-                          <Text style={styles.dropAvatarText}>{name[0]?.toUpperCase() ?? '?'}</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                            <View style={[styles.statusDot, peer.online ? styles.dotOnline : styles.dotOffline]} />
-                            <Text style={styles.dropRowName} numberOfLines={1}>{name}</Text>
-                          </View>
-                          <Text style={styles.dropRowSub}>{shortHash(peer.dest_hash)}</Text>
-                        </View>
-                        {isSel && <Text style={styles.dropCheck}>✓</Text>}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              )}
-            </View>
-          )}
-        </View>
-
-        <View style={styles.headerDivider} />
-
-        {/* 群組下拉區塊 */}
-        <View style={styles.dropWrapper}>
-          <TouchableOpacity
-            style={[styles.dropBtn, chatMode === 'group' && styles.dropBtnGroupActive]}
-            onPress={() => { setGroupDropOpen(v => !v); setPeerDropOpen(false); }}
-            activeOpacity={0.75}
-          >
-            <View style={styles.groupSquare} />
-            <Text style={[styles.dropBtnText, chatMode === 'group' && styles.dropBtnGroupText]} numberOfLines={1}>
-              {groupBtnLabel}
-            </Text>
-            <Text style={styles.dropChevron}>{groupDropOpen ? '▲' : '▾'}</Text>
-          </TouchableOpacity>
-
-          {groupDropOpen && (
-            <View style={[styles.dropList, styles.dropListRight]}>
-              {groupRooms.length === 0 ? (
-                <View style={styles.dropEmpty}>
-                  <Text style={styles.dropEmptyText}>尚無群組，前往「群組」頁建立</Text>
-                </View>
-              ) : (
-                <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-                  {groupRooms.map((room, idx) => {
-                    const isSel = room.group_name === selectedGroupName && chatMode === 'group';
-                    return (
-                      <TouchableOpacity
-                        key={room.group_name}
-                        style={[
-                          styles.dropRow,
-                          isSel && styles.dropRowSelected,
-                          idx > 0 && styles.dropRowBorder,
-                        ]}
-                        onPress={() => selectGroup(room.group_name)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={[styles.dropAvatar, styles.avatarGroup]}>
-                          <Text style={styles.dropAvatarText}>{room.group_name[0]?.toUpperCase() ?? '#'}</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.dropRowName} numberOfLines={1}>{room.group_name}</Text>
-                          <Text style={styles.dropRowSub}>
-                            {room.join_confirm ? '✓ 已加入' : '◌ 待加入'}
-                            {room.self_name ? `  ·  ${room.self_name}` : ''}
-                          </Text>
-                        </View>
-                        {isSel && <Text style={styles.dropCheck}>✓</Text>}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              )}
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* 點擊空白關閉下拉的遮罩（在 Header 下方，不蓋住 Header）*/}
-      {(peerDropOpen || groupDropOpen) && (
-        <TouchableOpacity
-          style={[StyleSheet.absoluteFillObject, { top: 52 }]}
-          activeOpacity={0}
-          onPress={() => { setPeerDropOpen(false); setGroupDropOpen(false); }}
-        />
+            {(currentGroup.members ?? []).length === 0 ? (
+              <Text style={styles.memberMenuEmpty}>尚無成員資料</Text>
+            ) : (
+              (currentGroup.members ?? []).map(member => {
+                const isOnline = lobbyPeers.find(p => p.dest_hash === member.dest_hash)?.online;
+                const name = member.display_name || shortHash(member.dest_hash);
+                return (
+                  <View key={member.dest_hash} style={styles.memberRow}>
+                    <View style={[styles.memberDot, isOnline ? styles.memberDotOnline : styles.memberDotOffline]} />
+                    <Text style={styles.memberName} numberOfLines={1}>{name}</Text>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        </>
       )}
 
       {/* ── 對話區 ── */}
@@ -691,7 +630,7 @@ export default function ChatScreen() {
           renderActions={renderActions}
           messagesContainerStyle={{ backgroundColor: isGroupMode ? '#E8EFF8' : '#E5DDD5' }}
           keyboardAvoidingViewProps={{
-            keyboardVerticalOffset: headerHeight + 52,
+            keyboardVerticalOffset: headerHeight,
           }}
           textInputProps={{
             placeholder: inputPlaceholder(),
@@ -776,7 +715,7 @@ const styles = StyleSheet.create({
 
   // ── Header ──
   header: {
-    height: 52,
+    height: 66,
     backgroundColor: '#F6F6F6',
     flexDirection: 'row',
     alignItems: 'center',
@@ -812,6 +751,12 @@ const styles = StyleSheet.create({
   dropBtnPeerText:    { color: '#1A6B3C' },
   dropBtnGroupText:   { color: '#0B4FA8' },
   dropChevron:        { fontSize: 10, color: '#999' },
+
+  // ── 模式標題（個人對話 / 群組）──
+  modeBtnTitle:      { fontSize: 13, fontWeight: '700', color: '#999', letterSpacing: 0.2 },
+  modeBtnTitlePeer:  { color: '#1A6B3C' },
+  modeBtnTitleGroup: { color: '#0B4FA8' },
+  modeBtnSub:        { fontSize: 12, color: '#555', marginTop: 1 },
 
   // ── 狀態點 ──
   statusDot:  { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
@@ -940,4 +885,43 @@ const styles = StyleSheet.create({
     paddingVertical: 13, alignItems: 'center',
   },
   joinConfirmText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+
+  // ── 群組成員選單 ──
+  memberMenu: {
+    position: 'absolute',
+    top: 6,
+    right: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E0E0E0',
+    zIndex: 200,
+  },
+  memberMenuTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#999',
+    letterSpacing: 0.3,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  memberMenuEmpty: { fontSize: 13, color: '#AAA' },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 5,
+  },
+  memberDot:        { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
+  memberDotOnline:  { backgroundColor: '#00C853' },
+  memberDotOffline: { backgroundColor: '#BBBBBB' },
+  memberName:       { fontSize: 14, color: '#222', flex: 1 },
 });

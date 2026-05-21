@@ -1,5 +1,5 @@
 // filepath: app/(tabs)/contacts.tsx
-import { Tabs } from 'expo-router';
+import { Tabs, router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,7 +16,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useMessaging } from '../context/MessagingContext';
+import {
+  AddMembersModal,
+  CreateGroupModal,
+  GroupDetailModal,
+  JoinGroupModal,
+} from '../../components/GroupModals';
+import { GroupMember, GroupRoom, useMessaging } from '../context/MessagingContext';
 
 // ── 型別 ─────────────────────────────────────────────────────────────────────
 
@@ -41,11 +47,19 @@ type BlockedContact = {
 type LobbyPeer = {
   dest_hash: string;
   announced_name?: string;
+  nickname?: string;
   is_saved_contact?: boolean;
   online?: boolean;
 };
 
-type Tab = 'contacts' | 'lobby' | 'blocklist';
+type Tab = 'contacts' | 'lobby' | 'blocklist' | 'groups';
+
+type ModalScene =
+  | { type: 'none' }
+  | { type: 'create' }
+  | { type: 'join' }
+  | { type: 'detail'; room: GroupRoom }
+  | { type: 'add_members'; room: GroupRoom };
 
 // ── 工具函式 ──────────────────────────────────────────────────────────────────
 
@@ -61,10 +75,15 @@ const formatTime = (ts?: number) => {
 // ── 主元件 ────────────────────────────────────────────────────────────────────
 
 export default function contacts() {
-  const { host, port } = useMessaging();
-  const baseUrl = `http://${host}:${port}`;
+  const {
+    baseUrl,
+    groupRooms, groupsLoading,
+    refreshGroups, registerGroup, unregisterGroup,
+  } = useMessaging();
 
   const [tab, setTab] = useState<Tab>('contacts');
+  const [scene, setScene] = useState<ModalScene>({ type: 'none' });
+  const [groupsLastRefresh, setGroupsLastRefresh] = useState<Date | null>(null);
   const [contacts, setContacts]     = useState<Contact[]>([]);
   const [lobbyPeers, setLobbyPeers] = useState<LobbyPeer[]>([]);
   const [blocklist, setBlocklist]   = useState<BlockedContact[]>([]);
@@ -176,6 +195,57 @@ export default function contacts() {
     await refreshAll();
   };
 
+  // ── 群組操作 ────────────────────────────────────────────────────────────────
+
+  const handleGroupRefresh = useCallback(async () => {
+    await refreshGroups();
+    setGroupsLastRefresh(new Date());
+  }, [refreshGroups]);
+
+  const fetchRoomDetail = useCallback(async (group_name: string): Promise<GroupRoom | null> => {
+    try {
+      const res = await fetch(`${baseUrl}/getGroupChat/${encodeURIComponent(group_name)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return (json?.data?.group_room as GroupRoom) ?? null;
+    } catch { return null; }
+  }, [baseUrl]);
+
+  const createGroup = useCallback(async (
+    group_name: string, self_name: string,
+    members: GroupMember[], invite_message: string,
+  ) => {
+    await apiPost('/newGroup', { group_name, self_name, members, invite_message: invite_message || undefined });
+    await registerGroup(group_name);
+  }, [apiPost, registerGroup]);
+
+  const joinGroup = useCallback(async (group_name: string, self_name: string) => {
+    await apiPost('/joinGroup', { group_name, self_name });
+    await refreshGroups();
+  }, [apiPost, refreshGroups]);
+
+  const addMembers = useCallback(async (
+    group_name: string, members: GroupMember[], invite_message: string,
+  ) => {
+    await apiPost('/addGroupMembers', { group_name, members, invite_message: invite_message || undefined });
+    await refreshGroups();
+  }, [apiPost, refreshGroups]);
+
+  const setSelfDisplayName = useCallback(async (group_name: string, self_name: string) => {
+    await apiPost('/setSelfDisplayName', { group_name, self_name });
+    await refreshGroups();
+  }, [apiPost, refreshGroups]);
+
+  useEffect(() => {
+    setScene(prev => {
+      if (prev.type !== 'detail') return prev;
+      const updated = groupRooms.find(r => r.group_name === prev.room.group_name);
+      return updated ? { type: 'detail', room: updated } : prev;
+    });
+  }, [groupRooms]);
+
   // ── 渲染輔助 ────────────────────────────────────────────────────────────────
 
   const displayName = (c: Contact) =>
@@ -184,10 +254,17 @@ export default function contacts() {
   const onlineGlyph = (online?: boolean) =>
     online ? <View style={styles.dotOnline} /> : <View style={styles.dotOffline} />;
 
+  const navigateToPeer = (dest_hash: string) =>
+    router.navigate({ pathname: '/(tabs)', params: { dest_hash } });
+  const navigateToGroup = (group_name: string) =>
+    router.navigate({ pathname: '/(tabs)', params: { group_name } });
+
   // ── 聯絡人列表項目 ──────────────────────────────────────────────────────────
 
-  const ContactRow = ({ item }: { item: Contact }) => (
-    <TouchableOpacity style={styles.row} onPress={() => setDetailContact(item)} activeOpacity={0.7}>
+  const ContactRow = ({ item }: { item: Contact }) => {
+    const isOnline = item.online ?? lobbyPeers.find(p => p.dest_hash === item.dest_hash)?.online;
+    return (
+    <TouchableOpacity style={styles.row} onPress={() => navigateToPeer(item.dest_hash)} activeOpacity={0.7}>
       <View style={styles.rowLeft}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
@@ -196,7 +273,7 @@ export default function contacts() {
         </View>
         <View style={styles.rowInfo}>
           <View style={styles.rowNameLine}>
-            {onlineGlyph(item.online)}
+            {onlineGlyph(isOnline)}
             <Text style={styles.rowName}>{displayName(item)}</Text>
           </View>
           <Text style={styles.rowSub} numberOfLines={1}>
@@ -204,9 +281,12 @@ export default function contacts() {
           </Text>
         </View>
       </View>
-      <Text style={styles.rowChevron}>›</Text>
+      <TouchableOpacity style={styles.optionBtn} onPress={() => setDetailContact(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Text style={styles.optionBtnText}>⋯</Text>
+      </TouchableOpacity>
     </TouchableOpacity>
-  );
+    );
+  };
 
   // ── Lobby 列表項目 ──────────────────────────────────────────────────────────
 
@@ -215,7 +295,7 @@ export default function contacts() {
     return (
       <TouchableOpacity
         style={[styles.row, isSaved && styles.rowSaved]}
-        onPress={() => { setSelectedLobbyPeer(item); setShowAddModal(true); }}
+        onPress={() => navigateToPeer(item.dest_hash)}
         activeOpacity={0.7}
       >
         <View style={styles.rowLeft}>
@@ -237,6 +317,9 @@ export default function contacts() {
             ? <View style={styles.badge}><Text style={styles.badgeText}>已儲存</Text></View>
             : <View style={styles.badgeAdd}><Text style={styles.badgeAddText}>＋ 新增</Text></View>
           }
+          <TouchableOpacity style={styles.optionBtn} onPress={() => { setSelectedLobbyPeer(item); setShowAddModal(true); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.optionBtnText}>⋯</Text>
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
@@ -245,7 +328,7 @@ export default function contacts() {
   // ── 封鎖列表項目 ────────────────────────────────────────────────────────────
 
   const BlockRow = ({ item }: { item: BlockedContact }) => (
-    <TouchableOpacity style={[styles.row, styles.rowBlocked]} onPress={() => setDetailBlocked(item)} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.row, styles.rowBlocked]} onPress={() => navigateToPeer(item.dest_hash)} activeOpacity={0.7}>
       <View style={styles.rowLeft}>
         <View style={styles.avatarBlocked}>
           <Text style={styles.avatarBlockedText}>⊘</Text>
@@ -257,7 +340,9 @@ export default function contacts() {
           </Text>
         </View>
       </View>
-      <Text style={styles.rowChevron}>›</Text>
+      <TouchableOpacity style={styles.optionBtn} onPress={() => setDetailBlocked(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Text style={styles.optionBtnText}>⋯</Text>
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 
@@ -267,6 +352,92 @@ export default function contacts() {
     <View style={styles.emptyWrap}>
       <Text style={styles.emptyIcon}>{icon}</Text>
       <Text style={styles.emptyMsg}>{msg}</Text>
+    </View>
+  );
+
+  const JoinBadge = ({ confirmed }: { confirmed?: boolean }) =>
+    confirmed ? (
+      <View style={styles.badgeJoined}><Text style={styles.badgeJoinedText}>✓ 已加入</Text></View>
+    ) : (
+      <View style={styles.badgePending}><Text style={styles.badgePendingText}>◌ 待加入</Text></View>
+    );
+
+  const GroupRow = ({ item, index }: { item: GroupRoom; index: number }) => {
+    const memberCount = item.members?.length ?? 0;
+    const rowAnim = useRef(new Animated.Value(0)).current;
+    useEffect(() => {
+      Animated.timing(rowAnim, { toValue: 1, duration: 280, delay: index * 55, useNativeDriver: true }).start();
+    }, []);
+    return (
+      <Animated.View style={{
+        opacity: rowAnim,
+        transform: [{ translateY: rowAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
+      }}>
+        <TouchableOpacity
+          style={styles.groupRow}
+          onPress={() => navigateToGroup(item.group_name)}
+          activeOpacity={0.75}
+        >
+          <View style={[styles.groupColorBar, item.join_confirm ? styles.colorBarJoined : styles.colorBarPending]} />
+          <View style={[styles.groupIcon, item.join_confirm ? styles.groupIconJoined : styles.groupIconPending]}>
+            <Text style={styles.groupIconText}>{item.group_name[0]?.toUpperCase() ?? '#'}</Text>
+          </View>
+          <View style={styles.groupInfo}>
+            <View style={styles.groupNameRow}>
+              <Text style={styles.groupName} numberOfLines={1}>{item.group_name}</Text>
+              <JoinBadge confirmed={item.join_confirm} />
+            </View>
+            <View style={styles.groupMeta}>
+              {item.self_name ? (
+                <Text style={styles.groupMetaText}>
+                  <Text style={styles.groupMetaLabel}>你的名稱  </Text>{item.self_name}
+                </Text>
+              ) : (
+                <Text style={[styles.groupMetaText, { color: C.textMute }]}>尚未設定顯示名稱</Text>
+              )}
+              {memberCount > 0 && (
+                <View style={styles.memberCountChip}>
+                  <Text style={styles.memberCountText}>{memberCount} 人</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.optionBtn}
+            onPress={() => {
+              setScene({ type: 'detail', room: item });
+              fetchRoomDetail(item.group_name).then(fresh => {
+                if (!fresh) return;
+                setScene(s =>
+                  s.type === 'detail' && s.room.group_name === item.group_name
+                    ? { type: 'detail', room: fresh } : s
+                );
+              });
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.optionBtnText}>⋯</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+
+  const GroupEmptyState = () => (
+    <View style={styles.groupEmptyWrap}>
+      <View style={styles.groupEmptyIconWrap}>
+        <Text style={styles.groupEmptyIcon}>◈</Text>
+      </View>
+      <Text style={styles.groupEmptyTitle}>尚無群組</Text>
+      <Text style={styles.groupEmptyMsg}>建立新群組或輸入群組名稱加入</Text>
+      <View style={styles.groupEmptyActions}>
+        <TouchableOpacity style={styles.groupEmptyBtn} onPress={() => setScene({ type: 'create' })}>
+          <Text style={styles.groupEmptyBtnText}>＋ 建立群組</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.groupEmptyBtnSecondary} onPress={() => setScene({ type: 'join' })}>
+          <Text style={styles.groupEmptyBtnSecondaryText}>加入群組</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -280,15 +451,37 @@ export default function contacts() {
         options={{
           headerRight: () => (
             <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 15, gap: 10 }}>
-              {lastRefresh && (
-                <Text style={styles.headerTime}>{lastRefresh.toLocaleTimeString('zh-TW')}</Text>
+              {tab === 'groups' ? (
+                <>
+                  {groupsLastRefresh && (
+                    <Text style={styles.headerTime}>{groupsLastRefresh.toLocaleTimeString('zh-TW')}</Text>
+                  )}
+                  <TouchableOpacity style={styles.groupHeaderJoinBtn} onPress={() => setScene({ type: 'join' })}>
+                    <Text style={styles.groupHeaderJoinText}>加入</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.groupHeaderCreateBtn} onPress={() => setScene({ type: 'create' })}>
+                    <Text style={styles.groupHeaderCreateText}>＋ 新建</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.refreshIconBtn} onPress={handleGroupRefresh} disabled={groupsLoading}>
+                    {groupsLoading
+                      ? <ActivityIndicator size="small" color="#0B6EFD" />
+                      : <Text style={styles.refreshIcon}>↻</Text>
+                    }
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  {lastRefresh && (
+                    <Text style={styles.headerTime}>{lastRefresh.toLocaleTimeString('zh-TW')}</Text>
+                  )}
+                  <TouchableOpacity style={styles.refreshIconBtn} onPress={refreshAll} disabled={loading}>
+                    {loading
+                      ? <ActivityIndicator size="small" color="#0B6EFD" />
+                      : <Text style={styles.refreshIcon}>↻</Text>
+                    }
+                  </TouchableOpacity>
+                </>
               )}
-              <TouchableOpacity style={styles.refreshIconBtn} onPress={refreshAll} disabled={loading}>
-                {loading
-                  ? <ActivityIndicator size="small" color="#0B6EFD" />
-                  : <Text style={styles.refreshIcon}>↻</Text>
-                }
-              </TouchableOpacity>
             </View>
           ),
         }}
@@ -298,7 +491,8 @@ export default function contacts() {
       <View style={styles.tabBar}>
         {([
           { key: 'contacts', label: '聯絡人', count: contacts.length },
-          { key: 'lobby',    label: 'Lobby',  count: lobbyPeers.length },
+          { key: 'groups',   label: '群組',   count: groupRooms.length },
+          { key: 'lobby',    label: '區域搜索', count: lobbyPeers.length },
           { key: 'blocklist',label: '封鎖',   count: blocklist.length },
         ] as { key: Tab; label: string; count: number }[]).map(t => (
           <TouchableOpacity
@@ -344,6 +538,18 @@ export default function contacts() {
             ListEmptyComponent={<EmptyState icon="🔓" msg="封鎖名單為空" />}
             contentContainerStyle={blocklist.length === 0 && styles.listEmpty}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
+          />
+        )}
+        {tab === 'groups' && (
+          <FlatList
+            data={groupRooms}
+            keyExtractor={r => r.group_name}
+            renderItem={({ item, index }) => <GroupRow item={item} index={index} />}
+            ListEmptyComponent={!groupsLoading ? <GroupEmptyState /> : null}
+            contentContainerStyle={groupRooms.length === 0 ? styles.listEmpty : undefined}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            refreshing={groupsLoading}
+            onRefresh={handleGroupRefresh}
           />
         )}
       </Animated.View>
@@ -411,6 +617,79 @@ export default function contacts() {
               setSelectedLobbyPeer(null);
             } catch (e: any) {
               Alert.alert('隱藏失敗', e.message);
+            }
+          }}
+        />
+      )}
+
+      {/* ── 群組 Modals ── */}
+      {scene.type === 'create' && (
+        <CreateGroupModal
+          lobbyPeers={lobbyPeers}
+          onClose={() => setScene({ type: 'none' })}
+          onCreate={async (group_name, self_name, members, invite_message) => {
+            await createGroup(group_name, self_name, members, invite_message);
+            setScene({ type: 'none' });
+            await handleGroupRefresh();
+          }}
+        />
+      )}
+
+      {scene.type === 'join' && (
+        <JoinGroupModal
+          onClose={() => setScene({ type: 'none' })}
+          onJoin={async (group_name, self_name) => {
+            try {
+              await joinGroup(group_name, self_name);
+              await registerGroup(group_name);
+              setScene({ type: 'none' });
+              await handleGroupRefresh();
+            } catch (e: any) {
+              Alert.alert('加入失敗', e.message);
+            }
+          }}
+        />
+      )}
+
+      {scene.type === 'detail' && (
+        <GroupDetailModal
+          room={scene.room}
+          onClose={() => setScene({ type: 'none' })}
+          onJoin={async (self_name) => {
+            try {
+              await joinGroup(scene.room.group_name, self_name);
+              setScene({ type: 'none' });
+            } catch (e: any) {
+              Alert.alert('加入失敗', e.message);
+            }
+          }}
+          onRename={async (self_name) => {
+            try {
+              await setSelfDisplayName(scene.room.group_name, self_name);
+              setScene({ type: 'none' });
+            } catch (e: any) {
+              Alert.alert('更新失敗', e.message);
+            }
+          }}
+          onAddMembers={() => setScene({ type: 'add_members', room: scene.room })}
+          onUnregister={async () => {
+            await unregisterGroup(scene.room.group_name);
+            setScene({ type: 'none' });
+          }}
+        />
+      )}
+
+      {scene.type === 'add_members' && (
+        <AddMembersModal
+          room={scene.room}
+          lobbyPeers={lobbyPeers}
+          onClose={() => setScene({ type: 'none' })}
+          onAdd={async (members, invite_message) => {
+            try {
+              await addMembers(scene.room.group_name, members, invite_message);
+              setScene({ type: 'none' });
+            } catch (e: any) {
+              Alert.alert('新增失敗', e.message);
             }
           }}
         />
@@ -900,6 +1179,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface,
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
     maxHeight: '85%',
+    paddingBottom: 28,
     borderTopWidth: 1, borderColor: C.border,
   },
   modalHeader: {
@@ -979,4 +1259,59 @@ const styles = StyleSheet.create({
   // ── 已儲存提示 ──
   alreadySavedBox: { backgroundColor: C.greenBg, borderRadius: 10, padding: 16, marginBottom: 16, alignItems: 'center' },
   alreadySavedText: { color: '#1A6B3C', fontSize: 14 },
+
+  // ── 群組 Tab ──
+  groupEmptyWrap:    { flex: 1, alignItems: 'center', paddingTop: 80, paddingHorizontal: 32 },
+  groupEmptyIconWrap: {
+    width: 72, height: 72, borderRadius: 20,
+    backgroundColor: C.surface, alignItems: 'center', justifyContent: 'center',
+    marginBottom: 20, borderWidth: 1, borderColor: C.border,
+  },
+  groupEmptyIcon:            { fontSize: 32, color: C.accentDim, fontFamily: 'monospace' },
+  groupEmptyTitle:           { color: C.text, fontSize: 18, fontWeight: '700', fontFamily: 'monospace', marginBottom: 8 },
+  groupEmptyMsg:             { color: C.textDim, fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 28 },
+  groupEmptyActions:         { flexDirection: 'row', gap: 10 },
+  groupEmptyBtn:             { backgroundColor: C.accentDim, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12 },
+  groupEmptyBtnText:         { color: '#fff', fontSize: 13, fontWeight: '700' },
+  groupEmptyBtnSecondary:    { backgroundColor: C.surface, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12, borderWidth: 1, borderColor: C.border },
+  groupEmptyBtnSecondaryText:{ color: C.textDim, fontSize: 13 },
+
+  groupRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 14, paddingRight: 16,
+    backgroundColor: C.bg, overflow: 'hidden',
+  },
+  groupColorBar:    { width: 3, alignSelf: 'stretch', marginRight: 12 },
+  colorBarJoined:   { backgroundColor: C.green },
+  colorBarPending:  { backgroundColor: '#C68600' },
+  groupIcon: {
+    width: 46, height: 46, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center', marginRight: 12,
+  },
+  groupIconJoined:  { backgroundColor: C.greenBg },
+  groupIconPending: { backgroundColor: '#FFF8E1' },
+  groupIconText:    { color: C.text, fontSize: 20, fontWeight: '700', fontFamily: 'monospace' },
+  groupInfo:        { flex: 1 },
+  groupNameRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  groupName:        { color: C.text, fontSize: 15, fontWeight: '600', fontFamily: 'monospace', flex: 1 },
+  groupMeta:        { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  groupMetaText:    { color: C.textDim, fontSize: 11, fontFamily: 'monospace' },
+  groupMetaLabel:   { color: C.textMute },
+  memberCountChip:  { backgroundColor: C.surface, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, borderWidth: 1, borderColor: C.border },
+  memberCountText:  { color: C.textDim, fontSize: 10 },
+  groupRowChevron:  { color: C.textMute, fontSize: 20, marginLeft: 4 },
+
+  badgeJoined:     { backgroundColor: C.greenBg, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#A8DDB5' },
+  badgeJoinedText: { color: '#1A6B3C', fontSize: 10, fontFamily: 'monospace' },
+  badgePending:    { backgroundColor: '#FFF8E1', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#F0D78A' },
+  badgePendingText:{ color: '#C68600', fontSize: 10, fontFamily: 'monospace' },
+
+  groupHeaderJoinBtn:    { borderWidth: 1, borderColor: C.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  groupHeaderJoinText:   { color: '#000', fontSize: 12, fontFamily: 'monospace' },
+  groupHeaderCreateBtn:  { backgroundColor: C.accentDim, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  groupHeaderCreateText: { color: '#fff', fontSize: 12, fontWeight: '700', fontFamily: 'monospace' },
+
+  // ── 選項按鈕 ──
+  optionBtn:     { padding: 8, alignItems: 'center', justifyContent: 'center' },
+  optionBtnText: { color: C.textMute, fontSize: 18, letterSpacing: 1 },
 });
