@@ -16,7 +16,10 @@ export interface LocationPayload {
  * Extended IMessage that supports location attachments and offline status.
  * Drop-in replacement for IMessage throughout the chat screen.
  */
+export type DeliveryStatus = 'send_pending' | 'delivered' | 'send_timeout';
+
 export interface LocationMessage extends IMessage {
   location?: LocationPayload;
   offlineStatus?: OfflineStatus;
+  deliveryStatus?: DeliveryStatus;
 }

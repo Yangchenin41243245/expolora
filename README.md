@@ -1,4 +1,4 @@
-# Welcome to your Expo app (尚未完成)
+# Welcome to your Expo app (尚未完成，為測試 RNS.Packet 無連線架構)
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 

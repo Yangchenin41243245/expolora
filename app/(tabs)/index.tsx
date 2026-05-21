@@ -24,7 +24,7 @@ import {
 } from 'react-native-gifted-chat';
 
 import LocationMessageBubble from '../../components/LocationMessageBubble';
-import type { LocationMessage, LocationPayload } from '../../types/chat';
+import type { DeliveryStatus, LocationMessage, LocationPayload } from '../../types/chat';
 import { getCurrentLocation } from '../../utils/location';
 import { useMessaging } from '../context/MessagingContext';
 
@@ -99,11 +99,13 @@ const withLocationPayload = <T extends LocationMessage>(message: T): T => {
 };
 
 const rawPeerMsgToIMessage = (m: RawPeerMsg, _idx: number): LocationMessage => {
+  const isSelf = m.status !== 'received';
   return withLocationPayload({
-    _id:       m.message_id ?? [m.timestamp, m.from_hash?.slice(0, 8), (m.content ?? '').slice(0, 16)].join('_'),
-    text:      m.content ?? '',
-    createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
-    user:      { _id: m.status !== 'received' ? MY_USER_ID : BOT_USER_ID },
+    _id:            m.message_id ?? [m.timestamp, m.from_hash?.slice(0, 8), (m.content ?? '').slice(0, 16)].join('_'),
+    text:           m.content ?? '',
+    createdAt:      m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
+    user:           { _id: isSelf ? MY_USER_ID : BOT_USER_ID },
+    deliveryStatus: isSelf ? (m.status as DeliveryStatus) : undefined,
   });
 };
 
@@ -493,11 +495,24 @@ export default function ChatScreen() {
           }}
           renderUsernameOnMessage={isGroupMode}
         />
-        {isMe && !isGroupMode && (
-          <View style={styles.tickContainer}>
-            <Text style={styles.tick}>✓✓</Text>
-          </View>
-        )}
+        {isMe && !isGroupMode && (() => {
+          const ds = (props.currentMessage as LocationMessage)?.deliveryStatus;
+          if (ds === 'send_timeout') return (
+            <View style={styles.tickContainer}>
+              <Text style={[styles.tick, styles.tickTimeout]}>✕</Text>
+            </View>
+          );
+          if (ds === 'delivered') return (
+            <View style={styles.tickContainer}>
+              <Text style={styles.tick}>✓✓</Text>
+            </View>
+          );
+          return (
+            <View style={styles.tickContainer}>
+              <Text style={[styles.tick, styles.tickPending]}>✓</Text>
+            </View>
+          );
+        })()}
       </View>
     );
   };
@@ -836,6 +851,8 @@ const styles = StyleSheet.create({
   },
   tickContainer: { alignItems: 'flex-end', marginRight: 8, marginTop: -4 },
   tick:          { fontSize: 12, color: 'rgba(0,0,0,0.4)' },
+  tickPending:   { color: 'rgba(0,0,0,0.22)' },
+  tickTimeout:   { color: '#FF3B30' },
 
   // ── 系統訊息 ──
   sysContainer: { marginVertical: 8 },
