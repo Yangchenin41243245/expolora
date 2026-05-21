@@ -4,7 +4,78 @@
 
 ---
 
-## Tab 1：聊天頁（`app/(tabs)/index.tsx`）
+## Tab 1：聯絡介面（`app/(tabs)/contacts.tsx`）
+
+### 功能概述
+
+管理所有聯絡關係，包含已儲存聯絡人、群組、區域搜索（Lobby）、封鎖名單四個子標籤。
+
+### 子標籤
+
+| 標籤 | 說明 |
+|------|------|
+| 聯絡人 | 已儲存的聯絡人列表，燈號反映即時在線狀態 |
+| 群組 | 群組房間列表，整合原 groups.tsx 功能 |
+| 區域搜索 | 目前在 Lobby 中的活躍節點 |
+| 封鎖 | 封鎖名單，可解除封鎖 |
+
+### 欄位互動
+
+| 操作 | 行為 |
+|------|------|
+| 點擊聯絡人 / 群組欄位 | 導航至聊天頁，自動選取對應 peer 或群組 |
+| 點擊右側 `⋯` 按鈕 | 開啟設定 Modal（編輯暱稱、封鎖、群組詳細等） |
+
+### 聯絡人在線狀態
+
+`/getContactList` 不回傳 `online` 欄位，透過比對 `lobbyPeers` 取得即時在線狀態。
+
+### 使用的 API
+
+#### 讀取資料
+
+| 用途 | 端點 | 回傳格式 |
+|------|------|----------|
+| 聯絡人列表 | `GET /getContactList` | `data.contacts[]`（含 dest_hash, nickname, notes） |
+| Lobby 節點 | `GET /getLobby` | `data.lobby[]`（過濾掉 `announced_name === "Unknown"`） |
+| 封鎖名單 | `GET /getBlocklist` | `data.blocklist[]` |
+| 群組列表 | `GET /getGroups` | `data.groups[]` |
+| 群組詳細 | `GET /getGroupChat/{group_name}` | `data.group_room`（含 members, join_confirm） |
+
+#### 聯絡人操作
+
+| 操作 | 端點 | Body |
+|------|------|------|
+| 儲存聯絡人 | `POST /saveContact` | `{ dest_hash, nickname?, notes? }` |
+| 編輯暱稱 | `POST /editContactName` | `{ dest_hash, nickname }` |
+| 編輯備註 | `POST /editContactNote` | `{ dest_hash, notes }` |
+
+#### 封鎖操作
+
+| 操作 | 端點 | Body |
+|------|------|------|
+| 封鎖聯絡人 | `POST /blockContact` | `{ dest_hash }` |
+| 解除封鎖 | `POST /unblockContact` | `{ dest_hash }` |
+| 隱藏連結 | `POST /hideLink` | `{ dest_hash }` |
+
+#### 群組操作
+
+| 操作 | 端點 | Body |
+|------|------|------|
+| 建立群組 | `POST /newGroup` | `{ group_name, self_name, members[], invite_message? }` |
+| 加入群組 | `POST /joinGroup` | `{ group_name, self_name }` |
+| 新增成員 | `POST /addGroupMembers` | `{ group_name, members[], invite_message? }` |
+| 修改顯示名稱 | `POST /setSelfDisplayName` | `{ group_name, self_name }` |
+
+### 注意事項
+
+- Lobby 節點列表會過濾掉 `announced_name === 'Unknown'` 的條目
+- Modal 底部設有 `paddingBottom: 28` 以避免被手機系統 UI 遮擋
+- 群組詳細 Modal 開啟時採兩階段更新：先顯示快照，再以 `/getGroupChat` 覆蓋
+
+---
+
+## Tab 2：聊天頁（`app/(tabs)/index.tsx`）
 
 ### 功能概述
 
@@ -12,10 +83,24 @@
 
 ### 介面元素
 
-- **Header 上方雙下拉**：左側選擇 P2P 節點，右側選擇群組
+- **Navigation Title**：動態顯示當前對話對象名稱與在線燈號
 - **GiftedChat 訊息列表**：支援文字和位置地圖氣泡
 - **位置按鈕**（左下角）：分享當前 GPS 座標
 - **加入群組 Banner / Modal**：尚未加入的群組顯示提示
+- **群組成員選單**（右上角 headerRight）：群組模式下顯示，列出成員與在線狀態
+
+### Navigation Title 狀態
+
+| chatMode | 顯示 |
+|----------|------|
+| `null` | `SNS對話` |
+| `'peer'` — 在線 | `● {peer 名稱}`（綠點） |
+| `'peer'` — 離線 | `● {peer 名稱}`（灰點） |
+| `'group'` | `■ {群組名稱}`（藍方形） |
+
+### 導航接收（來自聯絡人頁）
+
+透過 `useLocalSearchParams` 接收 `dest_hash` 或 `group_name` 參數，自動選取對應對話目標並清除參數。
 
 ### 使用的 API
 
@@ -60,128 +145,7 @@ LOCATION_MESSAGE_RE = /(?:📍\s*)?Location:\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:
 
 ---
 
-## Tab 2：聯絡人頁（`app/(tabs)/contacts.tsx`）
-
-### 功能概述
-
-管理三種類型的節點：**已儲存聯絡人**、**Lobby 活躍節點**、**封鎖名單**。
-
-### 子標籤
-
-| 標籤 | 說明 |
-|------|------|
-| 聯絡人 | 已儲存的聯絡人列表，可編輯暱稱與備註 |
-| Lobby | 目前在 Lobby 中的活躍節點，可直接儲存 |
-| 封鎖 | 封鎖名單，可解除封鎖 |
-
-### 使用的 API
-
-#### 讀取資料
-
-| 用途 | 端點 | 回傳格式 |
-|------|------|----------|
-| 聯絡人列表 | `GET /getContactList` | `data.contacts[]`（含 dest_hash, nickname, notes） |
-| Lobby 節點 | `GET /getLobby` | `data.lobby[]`（過濾掉 `announced_name === "Unknown"`） |
-| 封鎖名單 | `GET /getBlocklist` | `data.blocklist[]` |
-
-#### 聯絡人操作
-
-| 操作 | 端點 | Body |
-|------|------|------|
-| 儲存聯絡人 | `POST /saveContact` | `{ dest_hash, nickname?, notes? }` |
-| 編輯暱稱 | `POST /editContactName` | `{ dest_hash, nickname }` |
-| 編輯備註 | `POST /editContactNote` | `{ dest_hash, notes }` |
-
-#### 封鎖操作
-
-| 操作 | 端點 | Body |
-|------|------|------|
-| 封鎖聯絡人 | `POST /blockContact` | `{ dest_hash }` |
-| 解除封鎖 | `POST /unblockContact` | `{ dest_hash }` |
-| 隱藏連結 | `POST /hideLink` | `{ dest_hash }` |
-
-### 注意事項
-
-- Lobby 節點列表會過濾掉 `announced_name === 'Unknown'` 的條目（通常是本機節點）
-- 從 Lobby 標籤可直接點擊節點開啟「新增聯絡人」Modal
-
----
-
-## Tab 3：群組管理頁（`app/(tabs)/groups.tsx`）
-
-### 功能概述
-
-建立、加入、管理群組房間，支援成員邀請與顯示名稱設定。
-
-### 群組狀態
-
-| 狀態 | 說明 |
-|------|------|
-| `join_confirm: true` | 已加入群組，可收發訊息（綠色標示） |
-| `join_confirm: false` | 待加入（收到邀請但未確認），黃色標示 |
-
-### Modal 種類
-
-| Modal | 功能 |
-|-------|------|
-| 建立群組 | 設定群組名稱、自身顯示名稱、邀請 Lobby 節點、邀請訊息 |
-| 加入群組 | 輸入已知群組名稱與顯示名稱 |
-| 群組詳細 | 查看成員、修改顯示名稱、確認加入、新增成員、本地移除 |
-| 新增成員 | 從 Lobby 選取節點並發送邀請 |
-
-### 群組詳細 Modal 的資料更新機制
-
-開啟詳細 Modal 時採兩階段更新：
-1. 立即以 `groupRooms` 快照渲染（無延遲）
-2. 同時呼叫 `GET /getGroupChat/{group_name}` 取得最新 `group_room`，完成後覆蓋顯示
-
-此外，`groupRooms` 每次輪詢更新時（每 10 秒），若 Modal 仍開啟，會自動同步最新成員清單，無需關閉重開。
-
-### 使用的 API
-
-| 操作 | 端點 | Body |
-|------|------|------|
-| 建立群組 | `POST /newGroup` | `{ group_name, self_name, members[], invite_message? }` |
-| 加入群組 | `POST /joinGroup` | `{ group_name, self_name }` |
-| 新增成員 | `POST /addGroupMembers` | `{ group_name, members[], invite_message? }` |
-| 修改顯示名稱 | `POST /setSelfDisplayName` | `{ group_name, self_name }` |
-| 讀取群組清單 | `GET /getGroups` | 回傳 `data.groups[]`（含所有群組 metadata） |
-| 讀取群組狀態 | `GET /getGroupChat/{group_name}` | 回傳 `data.group_room`（含 members, join_confirm） |
-
-### 群組清單持久化
-
-群組名稱清單儲存於 AsyncStorage（`known_group_names`），每次 `refreshGroups()` 輪詢時由後端 `GET /getGroups` 覆寫更新。重裝 App 後，10 秒內即可從後端自動恢復群組清單。
-
----
-
-## Tab 4：對話紀錄頁（`app/(tabs)/identity.tsx`）
-
-### 功能概述
-
-查詢特定節點的對話紀錄，支援清除歷史記錄，可快速從 Lobby 選取目標節點。
-
-### 介面元素
-
-- **模式切換**：聯絡人模式（`/getChat`）/ 未儲存模式（`/getDirectChat`）
-- **Lobby 快速選取**：直接點選活躍節點
-- **訊息卡片**：顯示每則訊息的詳細資訊（方向、狀態、時間戳）
-- **清除按鈕**：清除選定節點的聊天紀錄
-
-### 使用的 API
-
-| 操作 | 端點 | 說明 |
-|------|------|------|
-| 查詢聯絡人記錄 | `GET /getChat/{dest_hash}` | 回傳 `data.messages[]` |
-| 查詢未儲存記錄 | `GET /getDirectChat/{dest_hash}` | 回傳 `data.messages[]` |
-| 清除紀錄 | `POST /clearChatHistory` | `{ dest_hash }` |
-
-### 訊息方向判斷
-
-利用 `localDestHash`（從 `/identity` 取得）與訊息的 `from_hash` 比對，判斷是否為自己發出的訊息。
-
----
-
-## Tab 5：設定與診斷頁（`app/(tabs)/j_settings.tsx`）
+## 設定頁（`app/(tabs)/j_settings.tsx`）
 
 ### 功能概述
 
@@ -210,7 +174,19 @@ LOCATION_MESSAGE_RE = /(?:📍\s*)?Location:\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:
 
 ---
 
+## 隱藏 Tab：群組管理（`app/(tabs)/groups.tsx`）
+
+> 此頁面在底部導覽列隱藏（`href: null`），保留程式碼供直接路由使用。
+> 群組功能已整合至聯絡介面（contacts.tsx）的「群組」子標籤。
+
+---
+
 ## 共用元件
+
+### `GroupModals`（`components/GroupModals.tsx`）
+
+群組相關 Modal 元件，從 `groups.tsx` 抽出以便多頁面共用：
+`CreateGroupModal`、`JoinGroupModal`、`GroupDetailModal`、`AddMembersModal`
 
 ### `LocationMessageBubble`（`components/LocationMessageBubble.tsx`）
 

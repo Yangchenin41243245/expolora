@@ -1,7 +1,7 @@
 name: Build Preview Android APK
 on:
   push:
-    branches: [ main, ui_reschedule_0520 ]
+    branches: [ main ]
     paths:
       - 'app/**'
       - 'components/**'
