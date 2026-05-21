@@ -630,7 +630,7 @@ export default function ChatScreen() {
           renderActions={renderActions}
           messagesContainerStyle={{ backgroundColor: isGroupMode ? '#E8EFF8' : '#E5DDD5' }}
           keyboardAvoidingViewProps={{
-            keyboardVerticalOffset: headerHeight + 66,
+            keyboardVerticalOffset: headerHeight,
           }}
           textInputProps={{
             placeholder: inputPlaceholder(),
