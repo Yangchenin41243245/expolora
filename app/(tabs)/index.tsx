@@ -6,7 +6,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   StatusBar,
   StyleSheet,
   Text,
@@ -24,7 +23,7 @@ import {
 } from 'react-native-gifted-chat';
 
 import LocationMessageBubble from '../../components/LocationMessageBubble';
-import type { LocationMessage, LocationPayload } from '../../types/chat';
+import type { DeliveryStatus, LocationMessage, LocationPayload } from '../../types/chat';
 import { getCurrentLocation } from '../../utils/location';
 import { useMessaging } from '../context/MessagingContext';
 
@@ -99,11 +98,13 @@ const withLocationPayload = <T extends LocationMessage>(message: T): T => {
 };
 
 const rawPeerMsgToIMessage = (m: RawPeerMsg, _idx: number): LocationMessage => {
+  const isSelf = m.status !== 'received';
   return withLocationPayload({
-    _id:       m.message_id ?? [m.timestamp, m.from_hash?.slice(0, 8), (m.content ?? '').slice(0, 16)].join('_'),
-    text:      m.content ?? '',
-    createdAt: m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
-    user:      { _id: m.status !== 'received' ? MY_USER_ID : BOT_USER_ID },
+    _id:            m.message_id ?? [m.timestamp, m.from_hash?.slice(0, 8), (m.content ?? '').slice(0, 16)].join('_'),
+    text:           m.content ?? '',
+    createdAt:      m.timestamp ? new Date(m.timestamp * 1000) : new Date(),
+    user:           { _id: isSelf ? MY_USER_ID : BOT_USER_ID },
+    deliveryStatus: isSelf ? (m.status as DeliveryStatus) : undefined,
   });
 };
 
@@ -140,13 +141,11 @@ export default function ChatScreen() {
     baseUrl,
     lobbyPeers:    lobbyPeersRaw,
     groupRooms:    groupRoomsRaw,
-    refreshGroups: refreshGroupsRaw,
   } = useMessaging();
 
-  const lobbyPeers    = lobbyPeersRaw    ?? [];
-  const groupRooms    = groupRoomsRaw    ?? [];
-  const refreshGroups = refreshGroupsRaw ?? (async () => {});
-  const headerHeight  = useHeaderHeight();
+  const lobbyPeers   = lobbyPeersRaw ?? [];
+  const groupRooms   = groupRoomsRaw ?? [];
+  const headerHeight = useHeaderHeight();
 
   // ── 選擇狀態：純字串，不存物件，從根本避免無限迴圈 ──────────────────────
   const [chatMode, setChatMode]                   = useState<ChatMode>(null);
@@ -157,9 +156,6 @@ export default function ChatScreen() {
   const chatStatesRef = useRef<Record<string, ChatState>>({});
   const [messages, setMessages] = useState<LocationMessage[]>([]);
   const [locationLoading, setLocationLoading] = useState(false);
-
-  // ── 加入確認 Modal ────────────────────────────────────────────────────────
-  const [showJoinModal, setShowJoinModal] = useState(false);
 
   // ── 群組成員選單 ──────────────────────────────────────────────────────────
   const [showMemberMenu, setShowMemberMenu] = useState(false);
@@ -178,7 +174,6 @@ export default function ChatScreen() {
   // ── 衍生：當前 peer / room 物件（純渲染用，不用於 effect 依賴）───────────
   const currentPeer  = lobbyPeers.find(p => p.dest_hash === selectedPeerHash) ?? null;
   const currentGroup = groupRooms.find(r => r.group_name === selectedGroupName) ?? null;
-  const joinPending  = chatMode === 'group' && !!currentGroup && !currentGroup.join_confirm;
   const isGroupMode  = chatMode === 'group';
 
   // ── 快取更新：透過 ref 讀取當前狀態，避免 setState 觸發 effect ───────────
@@ -305,11 +300,6 @@ export default function ChatScreen() {
     const gname = selectedGroupRef.current;
     if (!mode) return;
 
-    if (mode === 'group') {
-      const room = groupRoomsRaw?.find(r => r.group_name === gname);
-      if (!room?.join_confirm) { setShowJoinModal(true); return; }
-    }
-
     const key   = mode === 'peer' ? `peer:${hash}` : `group:${gname}`;
     const state = chatStatesRef.current[key] ?? { messages: [], knownCount: 0 };
     applyMessages(key, GiftedChat.append(state.messages, newMessages) as LocationMessage[]);
@@ -347,11 +337,6 @@ export default function ChatScreen() {
     const hash  = selectedPeerRef.current;
     const gname = selectedGroupRef.current;
     if (!mode) return;
-
-    if (mode === 'group') {
-      const room = groupRoomsRaw?.find(r => r.group_name === gname);
-      if (!room?.join_confirm) { setShowJoinModal(true); return; }
-    }
 
     setLocationLoading(true);
     try {
@@ -410,21 +395,6 @@ export default function ChatScreen() {
     }
   }, [baseUrl, applyMessages, lobbyPeersRaw, groupRoomsRaw]);
 
-  // ── 快速加入 ──────────────────────────────────────────────────────────────
-  const quickJoinGroup = useCallback(async () => {
-    const gname = selectedGroupRef.current;
-    if (!gname) return;
-    try {
-      await fetch(`${baseUrl}/msgGroup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ group_name: gname, message: '/join' }),
-      });
-      await refreshGroups();
-      setShowJoinModal(false);
-    } catch { /* 靜默 */ }
-  }, [baseUrl, refreshGroups]);
-
   // ── GiftedChat 渲染函式 ───────────────────────────────────────────────────
 
   const renderCustomView = (props: any) => {
@@ -440,7 +410,7 @@ export default function ChatScreen() {
   };
 
   const renderActions = (props: any) => {
-    const canAct = !!chatMode && !joinPending;
+    const canAct = !!chatMode;
     return (
       <TouchableOpacity
         style={styles.locationBtn}
@@ -493,11 +463,16 @@ export default function ChatScreen() {
           }}
           renderUsernameOnMessage={isGroupMode}
         />
-        {isMe && !isGroupMode && (
-          <View style={styles.tickContainer}>
-            <Text style={styles.tick}>✓✓</Text>
-          </View>
-        )}
+        {isMe && !isGroupMode && (() => {
+          const ds = (props.currentMessage as LocationMessage)?.deliveryStatus;
+          if (ds === 'send_timeout') {
+            return <View style={styles.tickContainer}><Text style={[styles.tick, styles.tickTimeout]}>✕</Text></View>;
+          }
+          if (ds === 'delivered') {
+            return <View style={styles.tickContainer}><Text style={styles.tick}>✓✓</Text></View>;
+          }
+          return <View style={styles.tickContainer}><Text style={[styles.tick, styles.tickPending]}>✓</Text></View>;
+        })()}
       </View>
     );
   };
@@ -509,14 +484,14 @@ export default function ChatScreen() {
   const renderInputToolbar = (props: any) => (
     <InputToolbar
       {...props}
-      containerStyle={[styles.inputToolbar, joinPending && styles.inputToolbarBlocked]}
+      containerStyle={styles.inputToolbar}
       primaryStyle={styles.primaryStyle}
     />
   );
 
   const renderSend = (props: any) => {
     const hasText = props.text?.trim().length > 0;
-    const canSend = hasText && !!chatMode && !joinPending;
+    const canSend = hasText && !!chatMode;
     return (
       <Send {...props} disabled={!canSend} containerStyle={styles.sendContainer}>
         <Ionicons name="send" size={24} color={canSend ? (isGroupMode ? '#0B6EFD' : '#00C853') : '#AAAAAA'} />
@@ -524,21 +499,8 @@ export default function ChatScreen() {
     );
   };
 
-  const JoinBanner = () => {
-    if (!joinPending) return null;
-    return (
-      <View style={styles.joinBanner}>
-        <Text style={styles.joinBannerText}>◌ 尚未加入此群組，無法發送訊息</Text>
-        <TouchableOpacity style={styles.joinBannerBtn} onPress={() => setShowJoinModal(true)}>
-          <Text style={styles.joinBannerBtnText}>立即加入</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
   const inputPlaceholder = () => {
     if (!chatMode)   return '請先從上方選擇使用者或群組';
-    if (joinPending) return '請先加入此群組';
     if (isGroupMode) return `傳送至 ${selectedGroupName}`;
     return '輸入訊息';
   };
@@ -636,7 +598,7 @@ export default function ChatScreen() {
             placeholder: inputPlaceholder(),
             placeholderTextColor: '#999',
             style: { fontSize: 16, color: '#000' },
-            editable: !!chatMode && !joinPending,
+            editable: !!chatMode,
           }}
           listProps={{ keyboardShouldPersistTaps: 'handled' }}
           isSendButtonAlwaysVisible
@@ -644,67 +606,12 @@ export default function ChatScreen() {
           scrollToBottomOffset={100}
           timeFormat="HH:mm"
           dateFormat="YYYY年M月D日"
-          renderFooter={() => <JoinBanner />}
         />
       </View>
 
-      {/* ── 快速加入 Modal ── */}
-      <QuickJoinModal
-        visible={showJoinModal}
-        groupName={selectedGroupName ?? ''}
-        onJoin={quickJoinGroup}
-        onClose={() => setShowJoinModal(false)}
-      />
     </View>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// QuickJoinModal
-// ─────────────────────────────────────────────────────────────────────────────
-
-type QuickJoinModalProps = {
-  visible: boolean;
-  groupName: string;
-  onJoin: () => Promise<void>;
-  onClose: () => void;
-};
-
-const QuickJoinModal: React.FC<QuickJoinModalProps> = ({ visible, groupName, onJoin, onClose }) => {
-  const [loading, setLoading] = useState(false);
-  const handle = async () => {
-    setLoading(true);
-    try { await onJoin(); }
-    finally { setLoading(false); }
-  };
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.joinModalOverlay}>
-        <View style={styles.joinModalSheet}>
-          <Text style={styles.joinModalTitle}>加入群組</Text>
-          <Text style={styles.joinModalBody}>
-            你尚未加入{'\n'}
-            <Text style={styles.joinModalGroupName}>{groupName}</Text>
-            {'\n\n'}點擊「快速加入」將在本地確認加入狀態。{'\n'}
-            如需設定顯示名稱，請前往「群組」頁面。
-          </Text>
-          <View style={styles.joinModalActions}>
-            <TouchableOpacity style={styles.joinCancelBtn} onPress={onClose}>
-              <Text style={styles.joinCancelText}>取消</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.joinConfirmBtn, loading && { opacity: 0.6 }]}
-              onPress={handle}
-              disabled={loading}
-            >
-              <Text style={styles.joinConfirmText}>{loading ? '加入中…' : '⊕ 快速加入'}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 樣式
@@ -822,7 +729,6 @@ const styles = StyleSheet.create({
     borderTopColor: '#D8D8D8',
     paddingVertical: 6,
   },
-  inputToolbarBlocked: { backgroundColor: '#F0F0F0', opacity: 0.6 },
   primaryStyle: {
     borderRadius: 22, backgroundColor: '#FFFFFF',
     borderWidth: 0.5, borderColor: '#E0E0E0',
@@ -836,6 +742,8 @@ const styles = StyleSheet.create({
   },
   tickContainer: { alignItems: 'flex-end', marginRight: 8, marginTop: -4 },
   tick:          { fontSize: 12, color: 'rgba(0,0,0,0.4)' },
+  tickPending:   { color: 'rgba(0,0,0,0.22)' },
+  tickTimeout:   { color: '#FF3B30' },
 
   // ── 系統訊息 ──
   sysContainer: { marginVertical: 8 },
@@ -845,46 +753,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10,
     overflow: 'hidden',
   },
-
-  // ── 加入 Banner ──
-  joinBanner: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#FFF8E1',
-    paddingHorizontal: 16, paddingVertical: 10,
-    borderTopWidth: 1, borderTopColor: '#FFE082',
-  },
-  joinBannerText: { color: '#7a6000', fontSize: 12, flex: 1 },
-  joinBannerBtn: {
-    backgroundColor: '#0B6EFD', borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 6, marginLeft: 10,
-  },
-  joinBannerBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-
-  // ── 快速加入 Modal ──
-  joinModalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  joinModalSheet: {
-    backgroundColor: '#FFFFFF', borderRadius: 18,
-    padding: 24, width: '84%',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18, shadowRadius: 16, elevation: 12,
-  },
-  joinModalTitle:     { fontSize: 18, fontWeight: '700', color: '#111', marginBottom: 12 },
-  joinModalBody:      { fontSize: 14, color: '#555', lineHeight: 22, marginBottom: 20 },
-  joinModalGroupName: { color: '#0B6EFD', fontWeight: '700', fontSize: 15 },
-  joinModalActions:   { flexDirection: 'row', gap: 10 },
-  joinCancelBtn: {
-    flex: 1, backgroundColor: '#F3F3F3', borderRadius: 10,
-    paddingVertical: 13, alignItems: 'center',
-  },
-  joinCancelText: { color: '#555', fontSize: 14 },
-  joinConfirmBtn: {
-    flex: 2, backgroundColor: '#0B6EFD', borderRadius: 10,
-    paddingVertical: 13, alignItems: 'center',
-  },
-  joinConfirmText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 
   // ── 群組成員選單 ──
   memberMenu: {

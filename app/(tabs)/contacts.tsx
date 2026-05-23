@@ -185,6 +185,11 @@ export default function contacts() {
     await refreshAll();
   };
 
+  const deleteContact = async (dest_hash: string) => {
+    await apiPost('/deleteContact', { dest_hash });
+    await refreshAll();
+  };
+
   const hideLink = async (dest_hash: string, reason: string) => {
     await apiPost('/hideLink', { dest_hash, reason: reason.trim() || 'ignore' });
     await refreshAll();
@@ -355,13 +360,6 @@ export default function contacts() {
     </View>
   );
 
-  const JoinBadge = ({ confirmed }: { confirmed?: boolean }) =>
-    confirmed ? (
-      <View style={styles.badgeJoined}><Text style={styles.badgeJoinedText}>✓ 已加入</Text></View>
-    ) : (
-      <View style={styles.badgePending}><Text style={styles.badgePendingText}>◌ 待加入</Text></View>
-    );
-
   const GroupRow = ({ item, index }: { item: GroupRoom; index: number }) => {
     const memberCount = item.members?.length ?? 0;
     const rowAnim = useRef(new Animated.Value(0)).current;
@@ -378,14 +376,13 @@ export default function contacts() {
           onPress={() => navigateToGroup(item.group_name)}
           activeOpacity={0.75}
         >
-          <View style={[styles.groupColorBar, item.join_confirm ? styles.colorBarJoined : styles.colorBarPending]} />
-          <View style={[styles.groupIcon, item.join_confirm ? styles.groupIconJoined : styles.groupIconPending]}>
+          <View style={styles.groupColorBar} />
+          <View style={styles.groupIcon}>
             <Text style={styles.groupIconText}>{item.group_name[0]?.toUpperCase() ?? '#'}</Text>
           </View>
           <View style={styles.groupInfo}>
             <View style={styles.groupNameRow}>
               <Text style={styles.groupName} numberOfLines={1}>{item.group_name}</Text>
-              <JoinBadge confirmed={item.join_confirm} />
             </View>
             <View style={styles.groupMeta}>
               {item.self_name ? (
@@ -569,6 +566,14 @@ export default function contacts() {
               Alert.alert('封鎖失敗', e.message);
             }
           }}
+          onDelete={async () => {
+            try {
+              await deleteContact(detailContact.dest_hash);
+              setDetailContact(null);
+            } catch (e: any) {
+              Alert.alert('刪除失敗', e.message);
+            }
+          }}
           onRefresh={async () => {
             await loadContacts();
             // 更新 modal 內的資料
@@ -655,14 +660,6 @@ export default function contacts() {
         <GroupDetailModal
           room={scene.room}
           onClose={() => setScene({ type: 'none' })}
-          onJoin={async (self_name) => {
-            try {
-              await joinGroup(scene.room.group_name, self_name);
-              setScene({ type: 'none' });
-            } catch (e: any) {
-              Alert.alert('加入失敗', e.message);
-            }
-          }}
           onRename={async (self_name) => {
             try {
               await setSelfDisplayName(scene.room.group_name, self_name);
@@ -710,11 +707,12 @@ type ContactDetailModalProps = {
   onEditNickname: (dest_hash: string, nickname: string) => Promise<void>;
   onEditNote: (dest_hash: string, note: string) => Promise<void>;
   onBlock: (reason: string) => Promise<void>;
+  onDelete: () => Promise<void>;
   onRefresh: () => Promise<void>;
 };
 
 const ContactDetailModal: React.FC<ContactDetailModalProps> = ({
-  contact, onClose, onEditNickname, onEditNote, onBlock, onRefresh,
+  contact, onClose, onEditNickname, onEditNote, onBlock, onDelete, onRefresh,
 }) => {
   const [nicknameEdit, setNicknameEdit] = useState(contact.nickname ?? contact.announced_name ?? '');
   const [noteEdit, setNoteEdit]         = useState(contact.notes ?? '');
@@ -740,6 +738,17 @@ const ContactDetailModal: React.FC<ContactDetailModalProps> = ({
     setSaving('block');
     try { await onBlock(blockReason); }
     finally { setSaving(null); }
+  };
+
+  const doDelete = async () => {
+    Alert.alert('刪除聯絡人', `確定要刪除 ${contact.nickname || contact.announced_name || contact.dest_hash.slice(0, 8)} 嗎？\n聊天記錄也將一併清除。`, [
+      { text: '取消', style: 'cancel' },
+      { text: '刪除', style: 'destructive', onPress: async () => {
+        setSaving('delete');
+        try { await onDelete(); }
+        finally { setSaving(null); }
+      }},
+    ]);
   };
 
   return (
@@ -830,6 +839,16 @@ const ContactDetailModal: React.FC<ContactDetailModalProps> = ({
             {/* 封鎖區 */}
             <View style={styles.dangerZone}>
               <Text style={styles.dangerLabel}>危險操作</Text>
+              <TouchableOpacity
+                style={[styles.dangerBtn, { marginBottom: 8 }, saving === 'delete' && styles.fieldBtnLoading]}
+                onPress={doDelete}
+                disabled={saving !== null}
+              >
+                {saving === 'delete'
+                  ? <ActivityIndicator size="small" color="#C0392B" />
+                  : <Text style={styles.dangerBtnText}>✕ 刪除聯絡人</Text>
+                }
+              </TouchableOpacity>
               {!showBlock ? (
                 <TouchableOpacity style={styles.dangerBtn} onPress={() => setShowBlock(true)}>
                   <Text style={styles.dangerBtnText}>⊘ 封鎖此聯絡人</Text>
@@ -1281,15 +1300,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14, paddingRight: 16,
     backgroundColor: C.bg, overflow: 'hidden',
   },
-  groupColorBar:    { width: 3, alignSelf: 'stretch', marginRight: 12 },
-  colorBarJoined:   { backgroundColor: C.green },
-  colorBarPending:  { backgroundColor: '#C68600' },
+  groupColorBar:    { width: 3, alignSelf: 'stretch', marginRight: 12, backgroundColor: '#0B6EFD' },
   groupIcon: {
     width: 46, height: 46, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center', marginRight: 12,
+    backgroundColor: '#EEF2FF',
   },
-  groupIconJoined:  { backgroundColor: C.greenBg },
-  groupIconPending: { backgroundColor: '#FFF8E1' },
   groupIconText:    { color: C.text, fontSize: 20, fontWeight: '700', fontFamily: 'monospace' },
   groupInfo:        { flex: 1 },
   groupNameRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
@@ -1300,11 +1316,6 @@ const styles = StyleSheet.create({
   memberCountChip:  { backgroundColor: C.surface, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, borderWidth: 1, borderColor: C.border },
   memberCountText:  { color: C.textDim, fontSize: 10 },
   groupRowChevron:  { color: C.textMute, fontSize: 20, marginLeft: 4 },
-
-  badgeJoined:     { backgroundColor: C.greenBg, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#A8DDB5' },
-  badgeJoinedText: { color: '#1A6B3C', fontSize: 10, fontFamily: 'monospace' },
-  badgePending:    { backgroundColor: '#FFF8E1', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#F0D78A' },
-  badgePendingText:{ color: '#C68600', fontSize: 10, fontFamily: 'monospace' },
 
   groupHeaderJoinBtn:    { borderWidth: 1, borderColor: C.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   groupHeaderJoinText:   { color: '#000', fontSize: 12, fontFamily: 'monospace' },

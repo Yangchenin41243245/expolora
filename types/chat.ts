@@ -6,6 +6,9 @@ import { IMessage } from 'react-native-gifted-chat';
 /** Offline sync status for a message */
 export type OfflineStatus = 'queued' | 'sending' | 'sent' | 'failed';
 
+/** Delivery confirmation status mirroring backend MessageStatus */
+export type DeliveryStatus = 'send_pending' | 'delivered' | 'send_timeout';
+
 /** GPS coordinate payload embedded in a message */
 export interface LocationPayload {
   latitude: number;
@@ -19,4 +22,5 @@ export interface LocationPayload {
 export interface LocationMessage extends IMessage {
   location?: LocationPayload;
   offlineStatus?: OfflineStatus;
+  deliveryStatus?: DeliveryStatus;
 }

@@ -190,17 +190,6 @@ export default function GroupsScreen() {
 
   // ── 渲染輔助 ──────────────────────────────────────────────────────────────
 
-  const JoinBadge = ({ confirmed }: { confirmed?: boolean }) =>
-    confirmed ? (
-      <View style={styles.badgeJoined}>
-        <Text style={styles.badgeJoinedText}>✓ 已加入</Text>
-      </View>
-    ) : (
-      <View style={styles.badgePending}>
-        <Text style={styles.badgePendingText}>◌ 待加入</Text>
-      </View>
-    );
-
   // ── 群組列表項目 ──────────────────────────────────────────────────────────
 
   const GroupRow = ({ item, index }: { item: GroupRoom; index: number }) => {
@@ -237,10 +226,10 @@ export default function GroupsScreen() {
           activeOpacity={0.75}
         >
           {/* 左側色塊標識 */}
-          <View style={[styles.groupColorBar, item.join_confirm ? styles.colorBarJoined : styles.colorBarPending]} />
+          <View style={styles.groupColorBar} />
 
           {/* 群組 Icon */}
-          <View style={[styles.groupIcon, item.join_confirm ? styles.groupIconJoined : styles.groupIconPending]}>
+          <View style={styles.groupIcon}>
             <Text style={styles.groupIconText}>
               {item.group_name[0]?.toUpperCase() ?? '#'}
             </Text>
@@ -250,7 +239,6 @@ export default function GroupsScreen() {
           <View style={styles.groupInfo}>
             <View style={styles.groupNameRow}>
               <Text style={styles.groupName} numberOfLines={1}>{item.group_name}</Text>
-              <JoinBadge confirmed={item.join_confirm} />
             </View>
             <View style={styles.groupMeta}>
               {item.self_name ? (
@@ -392,14 +380,6 @@ export default function GroupsScreen() {
         <GroupDetailModal
           room={scene.room}
           onClose={() => setScene({ type: 'none' })}
-          onJoin={async (self_name) => {
-            try {
-              await joinGroup(scene.room.group_name, self_name);
-              setScene({ type: 'none' });
-            } catch (e: any) {
-              Alert.alert('加入失敗', e.message);
-            }
-          }}
           onRename={async (self_name) => {
             try {
               await setSelfDisplayName(scene.room.group_name, self_name);
@@ -478,16 +458,13 @@ const styles = StyleSheet.create({
     backgroundColor: C.bg,
     overflow: 'hidden',
   },
-  groupColorBar: { width: 3, alignSelf: 'stretch', marginRight: 12 },
-  colorBarJoined:  { backgroundColor: C.green },
-  colorBarPending: { backgroundColor: C.yellow },
+  groupColorBar: { width: 3, alignSelf: 'stretch', marginRight: 12, backgroundColor: C.accentDim },
 
   groupIcon: {
     width: 46, height: 46, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center', marginRight: 12,
+    backgroundColor: C.surface,
   },
-  groupIconJoined:  { backgroundColor: C.greenBg },
-  groupIconPending: { backgroundColor: C.yellowBg },
   groupIconText: { color: C.text, fontSize: 20, fontWeight: '700', fontFamily: 'monospace' },
 
   groupInfo: { flex: 1 },
@@ -503,20 +480,6 @@ const styles = StyleSheet.create({
   },
   memberCountText: { color: C.textDim, fontSize: 10 },
   rowChevron: { color: C.textMute, fontSize: 20, marginLeft: 4 },
-
-  // ── 徽章 ──
-  badgeJoined: {
-    backgroundColor: C.greenBg, borderRadius: 10,
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderWidth: 1, borderColor: C.greenBorder,
-  },
-  badgeJoinedText: { color: '#1A6B3C', fontSize: 10, fontFamily: 'monospace' },
-  badgePending: {
-    backgroundColor: C.yellowBg, borderRadius: 10,
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderWidth: 1, borderColor: '#F0D78A',
-  },
-  badgePendingText: { color: C.yellow, fontSize: 10, fontFamily: 'monospace' },
 
   separator: { height: 1, backgroundColor: C.border, marginLeft: 73 },
   listEmpty:  { flex: 1 },

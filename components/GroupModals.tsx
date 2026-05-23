@@ -264,8 +264,7 @@ export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({ onClose, onJoin 
           <View style={styles.modalBody}>
             <View style={styles.infoBox}>
               <Text style={styles.infoBoxText}>
-                輸入已知的群組名稱與你的顯示名稱。{'\n'}
-                後端將設定本地 join_confirm = true。
+                輸入已知的群組名稱與你的顯示名稱以加入群組。
               </Text>
             </View>
 
@@ -317,33 +316,22 @@ export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({ onClose, onJoin 
 export type GroupDetailModalProps = {
   room: GroupRoom;
   onClose: () => void;
-  onJoin: (self_name: string) => Promise<void>;
   onRename: (self_name: string) => Promise<void>;
   onAddMembers: () => void;
   onUnregister: () => Promise<void>;
 };
 
 export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
-  room, onClose, onJoin, onRename, onAddMembers, onUnregister,
+  room, onClose, onRename, onAddMembers, onUnregister,
 }) => {
   const [newSelfName, setNewSelfName] = useState(room.self_name ?? '');
   const [saving, setSaving]           = useState<string | null>(null);
-  const [showJoin, setShowJoin]       = useState(false);
-  const [joinName, setJoinName]       = useState(room.self_name ?? '');
 
   const doRename = async () => {
     if (!newSelfName.trim()) { Alert.alert('請填寫', '顯示名稱不能空白'); return; }
     setSaving('rename');
     try { await onRename(newSelfName.trim()); }
     catch (e: any) { Alert.alert('更新失敗', e.message); }
-    finally { setSaving(null); }
-  };
-
-  const doJoin = async () => {
-    if (!joinName.trim()) { Alert.alert('請填寫', '請輸入顯示名稱'); return; }
-    setSaving('join');
-    try { await onJoin(joinName.trim()); }
-    catch (e: any) { Alert.alert('加入失敗', e.message); }
     finally { setSaving(null); }
   };
 
@@ -355,17 +343,13 @@ export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
         <View style={styles.modalSheet}>
 
           <View style={styles.modalHeader}>
-            <View style={[
-              styles.groupIcon,
-              room.join_confirm ? styles.groupIconJoined : styles.groupIconPending,
-              { width: 44, height: 44, borderRadius: 12 },
-            ]}>
+            <View style={[styles.groupIcon, { width: 44, height: 44, borderRadius: 12 }]}>
               <Text style={styles.groupIconText}>{room.group_name[0]?.toUpperCase() ?? '#'}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.modalTitle}>{room.group_name}</Text>
               <Text style={styles.modalSub}>
-                {room.join_confirm ? '✓ 已加入' : '◌ 尚未加入'}{memberCount > 0 ? `  ·  ${memberCount} 位成員` : ''}
+                {memberCount > 0 ? `${memberCount} 位成員` : '尚無成員'}
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -375,36 +359,6 @@ export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
 
           <ScrollView style={styles.modalBody}>
 
-            {!room.join_confirm && (
-              <View style={styles.joinBanner}>
-                <Text style={styles.joinBannerText}>◌ 尚未確認加入此群組</Text>
-                {!showJoin ? (
-                  <TouchableOpacity onPress={() => setShowJoin(true)}>
-                    <Text style={styles.joinBannerBtn}>立即加入 →</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={{ marginTop: 10, gap: 8 }}>
-                    <TextInput
-                      style={styles.fieldInput}
-                      value={joinName}
-                      onChangeText={setJoinName}
-                      placeholder="輸入你的顯示名稱"
-                      placeholderTextColor={C.textMute}
-                    />
-                    <TouchableOpacity
-                      style={[styles.primaryBtn, saving === 'join' && styles.btnLoading]}
-                      onPress={doJoin}
-                      disabled={saving !== null}
-                    >
-                      {saving === 'join'
-                        ? <ActivityIndicator size="small" color="#fff" />
-                        : <Text style={styles.primaryBtnText}>確認加入</Text>
-                      }
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            )}
 
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>你的顯示名稱</Text>
@@ -650,8 +604,6 @@ const styles = StyleSheet.create({
     width: 46, height: 46, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center', marginRight: 12,
   },
-  groupIconJoined:  { backgroundColor: '#E8F5E9' },
-  groupIconPending: { backgroundColor: '#FFF8E1' },
   groupIconText:    { color: C.text, fontSize: 20, fontWeight: '700', fontFamily: 'monospace' },
 
   // ── 表單 ──
@@ -712,14 +664,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', borderWidth: 1, borderColor: C.border,
   },
   emptyPeerText: { color: C.textDim, fontSize: 12, fontFamily: 'monospace' },
-
-  // ── 加入 Banner ──
-  joinBanner: {
-    backgroundColor: '#FFF8E1', borderRadius: 10, padding: 14,
-    borderWidth: 1, borderColor: '#F0D78A', marginBottom: 16,
-  },
-  joinBannerText: { color: C.yellow, fontSize: 13, fontFamily: 'monospace' },
-  joinBannerBtn:  { color: C.accent, fontSize: 13, marginTop: 8, fontWeight: '700' },
 
   // ── 成員列表 ──
   memberListBox: {
