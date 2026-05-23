@@ -500,7 +500,7 @@ export default function ChatScreen() {
   };
 
   const inputPlaceholder = () => {
-    if (!chatMode)   return '請先從上方選擇使用者或群組';
+    if (!chatMode)   return '請先從上方選擇使用者/群組';
     if (isGroupMode) return `傳送至 ${selectedGroupName}`;
     return '輸入訊息';
   };
