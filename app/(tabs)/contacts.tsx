@@ -286,7 +286,7 @@ export default function contacts() {
           </Text>
         </View>
       </View>
-      <TouchableOpacity style={styles.optionBtn} onPress={() => setDetailContact(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      <TouchableOpacity style={styles.optionBtn} onPress={() => setDetailContact({ ...item, online: isOnline })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <Text style={styles.optionBtnText}>⋯</Text>
       </TouchableOpacity>
     </TouchableOpacity>
@@ -753,7 +753,7 @@ const ContactDetailModal: React.FC<ContactDetailModalProps> = ({
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.modalSheet}>
 
           {/* Header */}
@@ -975,7 +975,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.modalSheet}>
           <View style={styles.modalHeader}>
             <View style={styles.avatar}>

@@ -100,7 +100,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.modalOverlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.modalSheet}>
 
@@ -247,7 +247,7 @@ export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({ onClose, onJoin 
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.modalOverlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={[styles.modalSheet, styles.modalSheetSmall]}>
 
@@ -339,7 +339,7 @@ export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
+      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.modalSheet}>
 
           <View style={styles.modalHeader}>
@@ -419,7 +419,7 @@ export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
             <View style={{ height: 20 }} />
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -470,7 +470,7 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.modalOverlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.modalSheet}>
           <View style={styles.modalHeader}>
