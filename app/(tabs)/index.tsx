@@ -72,7 +72,9 @@ const isGroupPacket = (content?: string): boolean => {
   if (!content) return false;
   try {
     const p = JSON.parse(content);
-    return typeof p === 'object' && p !== null && p.category === 'group';
+    if (typeof p !== 'object' || p === null) return false;
+    const pt: string = p.packet_type;
+    return pt === 'group' || pt === 'group_system' || pt === 'broadcast';
   } catch {
     return false;
   }
@@ -165,11 +167,13 @@ export default function ChatScreen() {
   const selectedPeerRef  = useRef<string | null>(null);
   const selectedGroupRef = useRef<string | null>(null);
   const lobbyPeersRef    = useRef(lobbyPeers);
+  const groupRoomsRef    = useRef(groupRooms);
 
   useEffect(() => { chatModeRef.current = chatMode; },             [chatMode]);
   useEffect(() => { selectedPeerRef.current = selectedPeerHash; }, [selectedPeerHash]);
   useEffect(() => { selectedGroupRef.current = selectedGroupName; },[selectedGroupName]);
   useEffect(() => { lobbyPeersRef.current = lobbyPeers; },          [lobbyPeers]);
+  useEffect(() => { groupRoomsRef.current = groupRooms; },          [groupRooms]);
 
   // ── 衍生：當前 peer / room 物件（純渲染用，不用於 effect 依賴）───────────
   const currentPeer  = lobbyPeers.find(p => p.dest_hash === selectedPeerHash) ?? null;
@@ -216,8 +220,10 @@ export default function ChatScreen() {
     const groupName = selectedGroupRef.current;
     if (!groupName) return;
     const key = `group:${groupName}`;
+    const room = groupRoomsRef.current.find(r => r.group_name === groupName);
+    const groupKey = room?.group_id || groupName;
     try {
-      const res = await fetch(`${baseUrl}/getGroupChat/${encodeURIComponent(groupName)}`, { headers: { Accept: 'application/json' } });
+      const res = await fetch(`${baseUrl}/getGroupChat/${encodeURIComponent(groupKey)}`, { headers: { Accept: 'application/json' } });
       if (!res.ok) return;
       const json = await res.json();
       const rawMsgs: RawGroupMsg[] = json?.data?.messages ?? [];
@@ -307,10 +313,11 @@ export default function ChatScreen() {
     for (const msg of newMessages) {
       try {
         if (mode === 'group') {
+          const grp = groupRoomsRef.current.find(r => r.group_name === gname);
           await fetch(`${baseUrl}/msgGroup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ group_name: gname, message: msg.text }),
+            body: JSON.stringify({ group_id: grp?.group_id, group_name: gname, message: msg.text }),
           });
         } else {
           // Try /msgContact first; fall back to /msgDirect on 404 (unsaved peer).
@@ -359,10 +366,11 @@ export default function ChatScreen() {
       // Send as plain text over the wire
       try {
         if (mode === 'group') {
+          const grp = groupRoomsRef.current.find(r => r.group_name === gname);
           await fetch(`${baseUrl}/msgGroup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ group_name: gname, message: locationMsg.text }),
+            body: JSON.stringify({ group_id: grp?.group_id, group_name: gname, message: locationMsg.text }),
           });
         } else {
           const locSendRes = await fetch(`${baseUrl}/msgContact`, {

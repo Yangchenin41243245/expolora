@@ -40,6 +40,7 @@ export type GroupMember = {
 
 export type GroupRoom = {
   group_name: string;
+  group_id?: string;
   self_name?: string;
   join_confirm?: boolean;
   members?: GroupMember[];

@@ -131,9 +131,10 @@ export default function GroupsScreen() {
     return json;
   }, [baseUrl]);
 
-  const fetchRoomDetail = useCallback(async (group_name: string): Promise<GroupRoom | null> => {
+  const fetchRoomDetail = useCallback(async (room: GroupRoom): Promise<GroupRoom | null> => {
+    const key = room.group_id || room.group_name;
     try {
-      const res = await fetch(`${baseUrl}/getGroupChat/${encodeURIComponent(group_name)}`, {
+      const res = await fetch(`${baseUrl}/getGroupChat/${encodeURIComponent(key)}`, {
         headers: { Accept: 'application/json' },
       });
       if (!res.ok) return null;
@@ -169,12 +170,13 @@ export default function GroupsScreen() {
   }, [apiPost, refreshGroups]);
 
   const addMembers = useCallback(async (
-    group_name: string,
+    room: GroupRoom,
     members: GroupMember[],
     invite_message: string,
   ) => {
     const json = await apiPost('/addGroupMembers', {
-      group_name,
+      group_id: room.group_id,
+      group_name: room.group_name,
       members,
       invite_message: invite_message || undefined,
     });
@@ -182,8 +184,12 @@ export default function GroupsScreen() {
     return json;
   }, [apiPost, refreshGroups]);
 
-  const setSelfDisplayName = useCallback(async (group_name: string, self_name: string) => {
-    const json = await apiPost('/setSelfDisplayName', { group_name, self_name });
+  const setSelfDisplayName = useCallback(async (room: GroupRoom, self_name: string) => {
+    const json = await apiPost('/setSelfDisplayName', {
+      group_id: room.group_id,
+      group_name: room.group_name,
+      self_name,
+    });
     await refreshGroups();
     return json;
   }, [apiPost, refreshGroups]);
@@ -214,7 +220,7 @@ export default function GroupsScreen() {
           style={styles.groupRow}
           onPress={() => {
             setScene({ type: 'detail', room: item });
-            fetchRoomDetail(item.group_name).then(fresh => {
+            fetchRoomDetail(item).then(fresh => {
               if (!fresh) return;
               setScene(s =>
                 s.type === 'detail' && s.room.group_name === item.group_name
@@ -382,7 +388,7 @@ export default function GroupsScreen() {
           onClose={() => setScene({ type: 'none' })}
           onRename={async (self_name) => {
             try {
-              await setSelfDisplayName(scene.room.group_name, self_name);
+              await setSelfDisplayName(scene.room, self_name);
               setScene({ type: 'none' });
             } catch (e: any) {
               Alert.alert('更新失敗', e.message);
@@ -403,7 +409,7 @@ export default function GroupsScreen() {
           onClose={() => setScene({ type: 'none' })}
           onAdd={async (members, invite_message) => {
             try {
-              await addMembers(scene.room.group_name, members, invite_message);
+              await addMembers(scene.room, members, invite_message);
               setScene({ type: 'none' });
             } catch (e: any) {
               Alert.alert('新增失敗', e.message);
