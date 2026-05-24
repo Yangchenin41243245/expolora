@@ -671,7 +671,8 @@ export default function contacts() {
           }}
           onAddMembers={() => setScene({ type: 'add_members', room: scene.room })}
           onUnregister={async () => {
-            await unregisterGroup(scene.room.group_name);
+            if (!scene.room.group_id) return;
+            await unregisterGroup(scene.room.group_id);
             setScene({ type: 'none' });
           }}
         />
