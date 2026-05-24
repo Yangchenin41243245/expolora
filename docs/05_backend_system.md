@@ -46,12 +46,12 @@ rns_app-core/
 ~/.reticulum/storage/
 ├── rns_app_contacts.json        ← 聯絡人
 ├── rns_app_blocklist.json       ← 封鎖名單
-├── rns_app_groups.json          ← 群組房間 metadata
+├── rns_app_groups.json          ← 群組房間 metadata（以 group_id UUID 為鍵）
 ├── rns_app_message_cache.json   ← 待確認送達的訊息快取
 ├── rns_app_chats/
 │   └── {dest_hash}.json         ← P2P 聊天記錄（每個聯絡人一檔）
 └── rns_app_group_chats/
-    └── {group_name}.json        ← 群組聊天記錄（每個群組一檔）
+    └── {group_id}.json          ← 群組聊天記錄（以 UUID 為檔名）
 ```
 
 > Reticulum config 目錄依序搜尋：`/etc/reticulum` → `~/.config/reticulum` → `~/.reticulum`，取第一個存在的目錄。`storage/` 子目錄由 `persistence_manager.get_storage_directory()` 自動建立。
@@ -108,11 +108,14 @@ RNS 是為低頻寬、高延遲網路（LoRa、封包無線電、串列埠）設
 
 ### 群組記錄（`rns_app_groups.json`）
 
+以 **UUID（group_id）** 為鍵，不再使用 display name：
+
 ```json
 {
-  "my_group": {
+  "550e8400-e29b-41d4-a716-446655440000": {
+    "group_id":   "550e8400-e29b-41d4-a716-446655440000",
     "group_name": "my_group",
-    "self_name": "Bob",
+    "self_name":  "Bob",
     "join_confirm": true,
     "invite_message": "",
     "members": [
@@ -143,19 +146,19 @@ RNS 是為低頻寬、高延遲網路（LoRa、封包無線電、串列埠）設
 - `"delivered"` — 自己發出的訊息
 - `"received"` — 收到的訊息
 
-### 群組聊天記錄（`rns_app_group_chats/{group_name}.json`）
+### 群組聊天記錄（`rns_app_group_chats/{group_id}.json`）
 
 ```json
 [
   {
-    "message_id": "uuid-...",
+    "message_id":   "uuid-...",
     "message_type": "GROUP",
-    "content": "大家好",
-    "from_hash": "a1b2c3d4...",
-    "from_name": "Alice",
-    "group_name": "my_group",
-    "status": "received",
-    "timestamp": 1715000001
+    "content":      "大家好",
+    "from_hash":    "a1b2c3d4...",
+    "from_name":    "Alice",
+    "group_name":   "my_group",
+    "status":       "received",
+    "timestamp":    1715000001
   }
 ]
 ```
@@ -167,7 +170,7 @@ RNS 是為低頻寬、高延遲網路（LoRa、封包無線電、串列埠）設
 | `GROUP` | 一般群組文字訊息 |
 | `GROUP_INVITE` | 邀請封包（通知被加入群組） |
 | `GROUP_JOIN` | 確認加入群組 |
-| `GROUP_SYSTEM` | 系統通知（成員變更等） |
+| `GROUP_SYSTEM` | 系統通知（成員變更、離開等） |
 
 ---
 
@@ -180,4 +183,5 @@ Flask 預設為同步 WSGI，無法維持長連線。前端每隔數秒以 HTTP 
 ## 已知限制
 
 - **單執行緒**：Flask dev server 同時只處理一個請求，高頻輪詢下可能有輕微延遲
-- **群組封包透過 P2P 通道傳送**：RNS 群組邀請與訊息會以 JSON 封包透過點對點連線傳遞，後端將其存入直接訊息記錄，前端必須用 `isGroupPacket()` 過濾
+- **群組封包透過 P2P 通道傳送**：RNS 群組控制訊息（邀請、加入確認）以 JSON 封包透過點對點連線傳遞，後端將其存入直接訊息記錄，前端必須用 `isGroupPacket()` 過濾
+- **RNS MTU 限制（約 500 bytes）**：GROUP 封包不攜帶完整成員清單，成員清單僅在 GROUP_SYSTEM 封包中傳送，以避免超出 MTU
