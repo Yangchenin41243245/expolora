@@ -234,14 +234,14 @@ export default function contacts() {
   }, [apiPost, registerGroup]);
 
   const addMembers = useCallback(async (
-    group_name: string, members: GroupMember[], invite_message: string,
+    room: GroupRoom, members: GroupMember[], invite_message: string,
   ) => {
-    await apiPost('/addGroupMembers', { group_name, members, invite_message: invite_message || undefined });
+    await apiPost('/addGroupMembers', { group_id: room.group_id, group_name: room.group_name, members, invite_message: invite_message || undefined });
     await refreshGroups();
   }, [apiPost, refreshGroups]);
 
-  const setSelfDisplayName = useCallback(async (group_name: string, self_name: string) => {
-    await apiPost('/setSelfDisplayName', { group_name, self_name });
+  const setSelfDisplayName = useCallback(async (room: GroupRoom, self_name: string) => {
+    await apiPost('/setSelfDisplayName', { group_id: room.group_id, group_name: room.group_name, self_name });
     await refreshGroups();
   }, [apiPost, refreshGroups]);
 
@@ -663,7 +663,7 @@ export default function contacts() {
           onClose={() => setScene({ type: 'none' })}
           onRename={async (self_name) => {
             try {
-              await setSelfDisplayName(scene.room.group_name, self_name);
+              await setSelfDisplayName(scene.room, self_name);
               setScene({ type: 'none' });
             } catch (e: any) {
               Alert.alert('更新失敗', e.message);
@@ -684,7 +684,7 @@ export default function contacts() {
           onClose={() => setScene({ type: 'none' })}
           onAdd={async (members, invite_message) => {
             try {
-              await addMembers(scene.room.group_name, members, invite_message);
+              await addMembers(scene.room, members, invite_message);
               setScene({ type: 'none' });
             } catch (e: any) {
               Alert.alert('新增失敗', e.message);

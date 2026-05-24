@@ -114,9 +114,11 @@ const rawGroupMsgToIMessage = (
   m: RawGroupMsg,
   _idx: number,
   selfName?: string,
+  localDestHash?: string | null,
 ): LocationMessage => {
   const isSystem = m.message_type === 'GROUP_SYSTEM' || m.message_type === 'GROUP_INVITE' || m.message_type === 'GROUP_JOIN';
   const isSelf =
+    (!!localDestHash && m.from_hash === localDestHash) ||
     m.status === 'delivered' ||
     (!!selfName && !!m.from_name && m.from_name === selfName);
 
@@ -141,6 +143,7 @@ const rawGroupMsgToIMessage = (
 export default function ChatScreen() {
   const {
     baseUrl,
+    localDestHash,
     lobbyPeers:    lobbyPeersRaw,
     groupRooms:    groupRoomsRaw,
   } = useMessaging();
@@ -166,14 +169,16 @@ export default function ChatScreen() {
   const chatModeRef      = useRef<ChatMode>(null);
   const selectedPeerRef  = useRef<string | null>(null);
   const selectedGroupRef = useRef<string | null>(null);
-  const lobbyPeersRef    = useRef(lobbyPeers);
-  const groupRoomsRef    = useRef(groupRooms);
+  const lobbyPeersRef      = useRef(lobbyPeers);
+  const groupRoomsRef      = useRef(groupRooms);
+  const localDestHashRef   = useRef(localDestHash);
 
   useEffect(() => { chatModeRef.current = chatMode; },             [chatMode]);
   useEffect(() => { selectedPeerRef.current = selectedPeerHash; }, [selectedPeerHash]);
   useEffect(() => { selectedGroupRef.current = selectedGroupName; },[selectedGroupName]);
   useEffect(() => { lobbyPeersRef.current = lobbyPeers; },          [lobbyPeers]);
   useEffect(() => { groupRoomsRef.current = groupRooms; },          [groupRooms]);
+  useEffect(() => { localDestHashRef.current = localDestHash; },    [localDestHash]);
 
   // ── 衍生：當前 peer / room 物件（純渲染用，不用於 effect 依賴）───────────
   const currentPeer  = lobbyPeers.find(p => p.dest_hash === selectedPeerHash) ?? null;
@@ -228,7 +233,7 @@ export default function ChatScreen() {
       const json = await res.json();
       const rawMsgs: RawGroupMsg[] = json?.data?.messages ?? [];
       const selfName: string | undefined = json?.data?.group_room?.self_name;
-      const converted = rawMsgs.map((m, i) => rawGroupMsgToIMessage(m, i, selfName)).reverse();
+      const converted = rawMsgs.map((m, i) => rawGroupMsgToIMessage(m, i, selfName, localDestHashRef.current)).reverse();
       applyMessages(key, converted);
     } catch { /* 靜默 */ }
   }, [baseUrl, applyMessages]);
