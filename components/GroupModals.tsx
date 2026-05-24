@@ -411,9 +411,9 @@ export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
             <View style={styles.dangerZone}>
               <Text style={styles.dangerLabel}>本地操作</Text>
               <TouchableOpacity style={styles.dangerBtn} onPress={onUnregister}>
-                <Text style={styles.dangerBtnText}>⊗ 從本地清單移除此群組</Text>
+                <Text style={styles.dangerBtnText}>⊗ 離開此群組</Text>
               </TouchableOpacity>
-              <Text style={styles.dangerHint}>僅移除本地記錄，不通知其他成員</Text>
+              <Text style={styles.dangerHint}>將通知其他成員並清除本地聊天記錄</Text>
             </View>
 
             <View style={{ height: 20 }} />

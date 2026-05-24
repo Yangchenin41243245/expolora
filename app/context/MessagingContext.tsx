@@ -80,15 +80,13 @@ type MessagingCtx = {
   /** 從後端重新抓取所有已知群組的最新狀態 */
   refreshGroups: () => Promise<void>;
   /**
-   * 將一個新的 group_name 加入本地已知清單，並立即抓取該房間狀態。
-   * 建立群組或收到邀請後呼叫。
+   * 將一個群組房間直接寫入本地狀態。建立群組或收到邀請後呼叫，傳入後端回傳的完整 GroupRoom（含 group_id）。
    */
-  registerGroup: (group_name: string) => Promise<void>;
+  registerGroup: (room: GroupRoom) => Promise<void>;
   /**
-   * 從本地已知清單中移除一個群組。
-   * 目前後端沒有 leaveGroup，此操作僅為本地清單維護。
+   * 離開群組：呼叫後端 /leaveGroup 並從本地狀態移除。
    */
-  unregisterGroup: (group_name: string) => Promise<void>;
+  unregisterGroup: (group_id: string) => Promise<void>;
 };
 
 // ── Context 預設值 ─────────────────────────────────────
@@ -105,8 +103,8 @@ const MessagingContext = createContext<MessagingCtx>({
   groupRooms: [],
   groupsLoading: false,
   refreshGroups: async () => {},
-  registerGroup: async () => {},
-  unregisterGroup: async () => {},
+  registerGroup: async (_room) => {},
+  unregisterGroup: async (_group_id) => {},
 });
 
 export const useMessaging = () => useContext(MessagingContext);
@@ -231,18 +229,18 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch { /* ignore */ }
   }, []);
 
-  // ── 抓取單一群組房間狀態 ─────────────────────────────
+  // ── 抓取單一群組房間狀態（需傳入 UUID）────────────────
 
   const fetchOneGroup = useCallback(
-    async (group_name: string): Promise<GroupRoom | null> => {
+    async (group_id: string): Promise<GroupRoom | null> => {
+      if (!group_id) return null;
       try {
         const res = await fetch(
-          `http://${hostRef.current}:${portRef.current}/getGroupChat/${group_name}`,
+          `http://${hostRef.current}:${portRef.current}/getGroupChat/${encodeURIComponent(group_id)}`,
           { headers: { Accept: 'application/json' } }
         );
         if (!res.ok) return null;
         const json = await res.json();
-        // 後端回傳 data.group_room，包含 group_name / self_name / join_confirm / members
         return (json?.data?.group_room as GroupRoom) ?? null;
       } catch {
         return null;
@@ -266,47 +264,48 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
       if (!res.ok) return;
       const json = await res.json();
       const rooms: GroupRoom[] = (json?.data?.groups ?? []) as GroupRoom[];
-      // 將後端群組清單同步回 AsyncStorage，解決重裝後名稱清單遺失的問題
-      await saveKnownGroupNames(rooms.map(r => r.group_name));
-      setGroupRooms(rooms.filter(r => !pendingRemoveRef.current.has(r.group_name)));
+      setGroupRooms(rooms.filter(r => !pendingRemoveRef.current.has(r.group_id ?? '')));
     } finally {
       setGroupsLoading(false);
     }
   }, [saveKnownGroupNames]);
 
-  // ── registerGroup：新增群組到已知清單並立即載入 ──────
+  // ── registerGroup：將後端回傳的 GroupRoom 直接寫入狀態 ──
 
   const registerGroup = useCallback(
-    async (group_name: string) => {
-      const names = await loadKnownGroupNames();
-      if (!names.includes(group_name)) {
-        await saveKnownGroupNames([...names, group_name]);
-      }
-      const room = await fetchOneGroup(group_name);
-      if (room) {
-        setGroupRooms(prev => {
-          const others = prev.filter(r => r.group_name !== group_name);
-          return [...others, room];
-        });
-      }
+    async (room: GroupRoom) => {
+      setGroupRooms(prev => {
+        const filtered = prev.filter(
+          r => r.group_id !== room.group_id && r.group_name !== room.group_name
+        );
+        return [...filtered, room];
+      });
     },
-    [loadKnownGroupNames, saveKnownGroupNames, fetchOneGroup]
+    []
   );
 
-  // ── unregisterGroup：從已知清單移除 ─────────────────
+  // ── unregisterGroup：呼叫後端 /leaveGroup 並移除 ─────
 
   const unregisterGroup = useCallback(
-    async (group_name: string) => {
-      pendingRemoveRef.current.add(group_name);     // ← 標記移除中
+    async (group_id: string) => {
+      pendingRemoveRef.current.add(group_id);
       try {
-        const names = await loadKnownGroupNames();
-        await saveKnownGroupNames(names.filter(n => n !== group_name));
-        setGroupRooms(prev => prev.filter(r => r.group_name !== group_name));
+        try {
+          await fetch(
+            `http://${hostRef.current}:${portRef.current}/leaveGroup`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({ group_id }),
+            }
+          );
+        } catch { /* 靜默失敗，繼續本地移除 */ }
+        setGroupRooms(prev => prev.filter(r => r.group_id !== group_id));
       } finally {
-        pendingRemoveRef.current.delete(group_name); // ← 移除完成
+        pendingRemoveRef.current.delete(group_id);
       }
     },
-    [loadKnownGroupNames, saveKnownGroupNames]
+    []
   );
 
   // ── Lobby 輪詢 ───────────────────────────────────────

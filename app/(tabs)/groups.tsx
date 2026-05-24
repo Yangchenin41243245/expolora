@@ -159,15 +159,19 @@ export default function GroupsScreen() {
       members,
       invite_message: invite_message || undefined,
     });
-    await registerGroup(group_name);
+    // 從回應取得含 group_id 的完整房間物件並立即寫入狀態
+    const room: GroupRoom | undefined = json?.data?.group_room;
+    if (room) await registerGroup(room);
     return json;
   }, [apiPost, registerGroup]);
 
   const joinGroup = useCallback(async (group_name: string, self_name: string) => {
     const json = await apiPost('/joinGroup', { group_name, self_name });
-    await refreshGroups();
+    // 從回應取得完整房間物件（含 group_id）並立即寫入狀態
+    const room: GroupRoom | undefined = json?.data?.group_room;
+    if (room) await registerGroup(room);
     return json;
-  }, [apiPost, refreshGroups]);
+  }, [apiPost, registerGroup]);
 
   const addMembers = useCallback(async (
     room: GroupRoom,
@@ -371,8 +375,6 @@ export default function GroupsScreen() {
           onJoin={async (group_name, self_name) => {
             try {
               await joinGroup(group_name, self_name);
-              // 加入後也要把 group_name 加入 Context 清單
-              await registerGroup(group_name);
               setScene({ type: 'none' });
               await handleRefresh();
             } catch (e: any) {
@@ -396,7 +398,9 @@ export default function GroupsScreen() {
           }}
           onAddMembers={() => setScene({ type: 'add_members', room: scene.room })}
           onUnregister={async () => {
-            await unregisterGroup(scene.room.group_name);
+            if (scene.room.group_id) {
+              await unregisterGroup(scene.room.group_id);
+            }
             setScene({ type: 'none' });
           }}
         />

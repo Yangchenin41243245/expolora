@@ -222,14 +222,16 @@ export default function contacts() {
     group_name: string, self_name: string,
     members: GroupMember[], invite_message: string,
   ) => {
-    await apiPost('/newGroup', { group_name, self_name, members, invite_message: invite_message || undefined });
-    await registerGroup(group_name);
+    const json = await apiPost('/newGroup', { group_name, self_name, members, invite_message: invite_message || undefined });
+    const room: GroupRoom | undefined = json?.data?.group_room;
+    if (room) await registerGroup(room);
   }, [apiPost, registerGroup]);
 
   const joinGroup = useCallback(async (group_name: string, self_name: string) => {
-    await apiPost('/joinGroup', { group_name, self_name });
-    await refreshGroups();
-  }, [apiPost, refreshGroups]);
+    const json = await apiPost('/joinGroup', { group_name, self_name });
+    const room: GroupRoom | undefined = json?.data?.group_room;
+    if (room) await registerGroup(room);
+  }, [apiPost, registerGroup]);
 
   const addMembers = useCallback(async (
     group_name: string, members: GroupMember[], invite_message: string,
@@ -646,7 +648,6 @@ export default function contacts() {
           onJoin={async (group_name, self_name) => {
             try {
               await joinGroup(group_name, self_name);
-              await registerGroup(group_name);
               setScene({ type: 'none' });
               await handleGroupRefresh();
             } catch (e: any) {
