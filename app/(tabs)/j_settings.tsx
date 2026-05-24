@@ -25,7 +25,7 @@ const TEST_IS_SAVED = false;
 // ────────────────────────────────────────────────────────
 
 const ENDPOINT_GROUPS = {
-  診斷: ['/status', '/identity', '/messages', '/getSystemTime'],
+  診斷: ['/status', '/identity', '/getSystemTime'],
   聯絡人: ['/getContactList', '/getBlocklist'],
   Lobby: ['/getLobby'],
 } as const;
