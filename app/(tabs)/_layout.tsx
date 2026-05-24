@@ -20,6 +20,10 @@ export default function TabLayout() {
         }}
       >
         <Tabs.Screen
+          name="index"
+          options={{ href: null }}
+        />
+        <Tabs.Screen
           name="contacts"
           options={{
             title: '聯絡介面',
@@ -41,7 +45,7 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="index"
+          name="chat"
           options={{
             title: '通訊頁面',
             tabBarLabel: 'CHAT',

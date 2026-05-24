@@ -262,9 +262,9 @@ export default function contacts() {
     online ? <View style={styles.dotOnline} /> : <View style={styles.dotOffline} />;
 
   const navigateToPeer = (dest_hash: string) =>
-    router.navigate({ pathname: '/(tabs)', params: { dest_hash } });
+    router.navigate({ pathname: '/(tabs)/chat', params: { dest_hash } });
   const navigateToGroup = (group_name: string) =>
-    router.navigate({ pathname: '/(tabs)', params: { group_name } });
+    router.navigate({ pathname: '/(tabs)/chat', params: { group_name } });
 
   // ── 聯絡人列表項目 ──────────────────────────────────────────────────────────
 
