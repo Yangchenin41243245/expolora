@@ -121,6 +121,9 @@ const rawGroupMsgToIMessage = (
     (!!localDestHash && m.from_hash === localDestHash) ||
     m.status === 'delivered' ||
     (!!selfName && !!m.from_name && m.from_name === selfName);
+  const senderName = isSelf
+    ? (selfName ?? m.from_name ?? '我')
+    : (m.from_name ?? (m.from_hash ? shortHash(m.from_hash) : '成員'));
 
   return withLocationPayload({
     _id:       m.message_id ?? [m.timestamp, m.from_hash?.slice(0, 8), (m.content ?? '').slice(0, 16)].join('_'),
@@ -130,8 +133,8 @@ const rawGroupMsgToIMessage = (
     user: isSystem
       ? { _id: 0 }
       : {
-          _id:  isSelf ? MY_USER_ID : BOT_USER_ID,
-          name: m.from_name ?? 'Member',
+          _id:  isSelf ? MY_USER_ID : (m.from_hash ?? m.from_name ?? BOT_USER_ID),
+          name: senderName,
         },
   });
 };
@@ -313,12 +316,18 @@ export default function ChatScreen() {
 
     const key   = mode === 'peer' ? `peer:${hash}` : `group:${gname}`;
     const state = chatStatesRef.current[key] ?? { messages: [], knownCount: 0 };
-    applyMessages(key, GiftedChat.append(state.messages, newMessages) as LocationMessage[]);
+    const grp = mode === 'group' ? groupRoomsRef.current.find(r => r.group_name === gname) : null;
+    const outgoingMessages = mode === 'group'
+      ? newMessages.map(message => ({
+          ...message,
+          user: { ...message.user, name: grp?.self_name ?? '我' },
+        }))
+      : newMessages;
+    applyMessages(key, GiftedChat.append(state.messages, outgoingMessages) as LocationMessage[]);
 
-    for (const msg of newMessages) {
+    for (const msg of outgoingMessages) {
       try {
         if (mode === 'group') {
-          const grp = groupRoomsRef.current.find(r => r.group_name === gname);
           await fetch(`${baseUrl}/msgGroup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -353,12 +362,16 @@ export default function ChatScreen() {
     setLocationLoading(true);
     try {
       const { latitude, longitude } = await getCurrentLocation();
+      const grp = mode === 'group' ? groupRoomsRef.current.find(r => r.group_name === gname) : null;
 
       const locationMsg: LocationMessage = {
         _id: `loc_${Date.now()}`,
         text: `📍 Location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
         createdAt: new Date(),
-        user: { _id: MY_USER_ID },
+        user: {
+          _id: MY_USER_ID,
+          name: mode === 'group' ? (grp?.self_name ?? '我') : undefined,
+        },
         location: { latitude, longitude },
         offlineStatus: 'queued',
       };
@@ -371,7 +384,6 @@ export default function ChatScreen() {
       // Send as plain text over the wire
       try {
         if (mode === 'group') {
-          const grp = groupRoomsRef.current.find(r => r.group_name === gname);
           await fetch(`${baseUrl}/msgGroup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -445,9 +457,21 @@ export default function ChatScreen() {
   };
 
   const renderBubble = (props: any) => {
-    const isMe = props.currentMessage?.user?._id === MY_USER_ID;
+    const currentMessage = props.currentMessage as LocationMessage | undefined;
+    const isMe = currentMessage?.user?._id === MY_USER_ID;
+    const showSenderName = isGroupMode && !!currentMessage && !currentMessage.system;
+    const senderName = isMe ? '我' : (currentMessage?.user?.name ?? '成員');
+
     return (
       <View>
+        {showSenderName && (
+          <Text
+            style={[styles.senderName, isMe ? styles.senderNameRight : styles.senderNameLeft]}
+            numberOfLines={1}
+          >
+            {senderName}
+          </Text>
+        )}
         <Bubble
           {...props}
           wrapperStyle={{
@@ -474,10 +498,10 @@ export default function ChatScreen() {
             right: { color: 'rgba(255,255,255,0.65)', fontSize: 11 },
             left:  { color: '#888', fontSize: 11 },
           }}
-          renderUsernameOnMessage={isGroupMode}
+          isUsernameVisible={false}
         />
         {isMe && !isGroupMode && (() => {
-          const ds = (props.currentMessage as LocationMessage)?.deliveryStatus;
+          const ds = currentMessage?.deliveryStatus;
           if (ds === 'send_timeout') {
             return <View style={styles.tickContainer}><Text style={[styles.tick, styles.tickTimeout]}>✕</Text></View>;
           }
@@ -757,6 +781,22 @@ const styles = StyleSheet.create({
   tick:          { fontSize: 12, color: 'rgba(0,0,0,0.4)' },
   tickPending:   { color: 'rgba(0,0,0,0.22)' },
   tickTimeout:   { color: '#FF3B30' },
+  senderName: {
+    maxWidth: 220,
+    marginBottom: 3,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5D6878',
+  },
+  senderNameLeft: {
+    alignSelf: 'flex-start',
+    marginLeft: 8,
+  },
+  senderNameRight: {
+    alignSelf: 'flex-end',
+    marginRight: 8,
+    color: '#315F9F',
+  },
 
   // ── 系統訊息 ──
   sysContainer: { marginVertical: 8 },
