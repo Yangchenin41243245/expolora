@@ -43,6 +43,23 @@ const C = {
 
 const shortHash = (h: string) => (h ? `${h.slice(0, 8)}…` : '—');
 
+// Mirror backend guardrails so errors surface before the API call.
+const MAX_MEMBERS_PER_OP  = 5;
+const MAX_GROUP_NAME_BYTES = 64;
+const MAX_USER_NAME_BYTES  = 32;
+
+const utf8ByteLen = (s: string): number => {
+  let bytes = 0;
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code < 0x80) bytes += 1;
+    else if (code < 0x800) bytes += 2;
+    else if (code < 0xD800 || code >= 0xE000) bytes += 3;
+    else { i++; bytes += 4; }
+  }
+  return bytes;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Modal：建立群組
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,7 +90,11 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   const togglePeer = (dest_hash: string) => {
     setSelectedHashes(prev => {
       const next = new Set(prev);
-      next.has(dest_hash) ? next.delete(dest_hash) : next.add(dest_hash);
+      if (next.has(dest_hash)) {
+        next.delete(dest_hash);
+      } else if (next.size < MAX_MEMBERS_PER_OP) {
+        next.add(dest_hash);
+      }
       return next;
     });
   };
@@ -81,7 +102,16 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   const handleCreate = async () => {
     setErrorMsg('');
     if (!groupName.trim()) { setErrorMsg('群組名稱不能空白'); return; }
+    if (utf8ByteLen(groupName.trim()) > MAX_GROUP_NAME_BYTES) {
+      setErrorMsg(`群組名稱不能超過 ${MAX_GROUP_NAME_BYTES} bytes`); return;
+    }
     if (!selfName.trim())  { setErrorMsg('請輸入你在群組中的顯示名稱'); return; }
+    if (utf8ByteLen(selfName.trim()) > MAX_USER_NAME_BYTES) {
+      setErrorMsg(`顯示名稱不能超過 ${MAX_USER_NAME_BYTES} bytes`); return;
+    }
+    if (selectedHashes.size > MAX_MEMBERS_PER_OP) {
+      setErrorMsg(`每次最多邀請 ${MAX_MEMBERS_PER_OP} 位成員`); return;
+    }
     const members: GroupMember[] = [...selectedHashes].map(h => ({
       dest_hash: h,
       display_name: displayNames[h]?.trim() || undefined,
@@ -450,13 +480,20 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
   const togglePeer = (dest_hash: string) => {
     setSelectedHashes(prev => {
       const next = new Set(prev);
-      next.has(dest_hash) ? next.delete(dest_hash) : next.add(dest_hash);
+      if (next.has(dest_hash)) {
+        next.delete(dest_hash);
+      } else if (next.size < MAX_MEMBERS_PER_OP) {
+        next.add(dest_hash);
+      }
       return next;
     });
   };
 
   const handleAdd = async () => {
     if (selectedHashes.size === 0) { Alert.alert('請選擇', '至少選擇一位成員'); return; }
+    if (selectedHashes.size > MAX_MEMBERS_PER_OP) {
+      Alert.alert('人數超限', `每次最多新增 ${MAX_MEMBERS_PER_OP} 位成員`); return;
+    }
     const members: GroupMember[] = [...selectedHashes].map(h => ({
       dest_hash: h,
       display_name: displayNames[h]?.trim() || undefined,

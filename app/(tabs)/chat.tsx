@@ -73,8 +73,11 @@ const isGroupPacket = (content?: string): boolean => {
   try {
     const p = JSON.parse(content);
     if (typeof p !== 'object' || p === null) return false;
-    const pt: string = p.packet_type;
-    return pt === 'group' || pt === 'group_system' || pt === 'broadcast';
+    // Support compact key (pkt_type) and legacy key (packet_type).
+    // Subtypes use colon notation e.g. "group_system:f" — compare base only.
+    const pt: string = p.pkt_type || p.packet_type || '';
+    const base = pt.split(':')[0];
+    return base === 'group' || base === 'group_system' || base === 'broadcast';
   } catch {
     return false;
   }
