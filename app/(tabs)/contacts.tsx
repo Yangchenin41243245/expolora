@@ -261,8 +261,8 @@ export default function contacts() {
   const onlineGlyph = (online?: boolean) =>
     online ? <View style={styles.dotOnline} /> : <View style={styles.dotOffline} />;
 
-  const navigateToPeer = (dest_hash: string) =>
-    router.navigate({ pathname: '/(tabs)/chat' as never, params: { dest_hash } });
+  const navigateToPeer = (dest_hash: string, displayName?: string) =>
+    router.navigate({ pathname: '/(tabs)/chat' as never, params: { dest_hash, ...(displayName ? { peer_name: displayName } : {}) } });
   const navigateToGroup = (group_name: string) =>
     router.navigate({ pathname: '/(tabs)/chat' as never, params: { group_name } });
 
@@ -271,7 +271,7 @@ export default function contacts() {
   const ContactRow = ({ item }: { item: Contact }) => {
     const isOnline = item.online ?? lobbyPeers.find(p => p.dest_hash === item.dest_hash)?.online;
     return (
-    <TouchableOpacity style={styles.row} onPress={() => navigateToPeer(item.dest_hash)} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.row} onPress={() => navigateToPeer(item.dest_hash, displayName(item))} activeOpacity={0.7}>
       <View style={styles.rowLeft}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
@@ -302,7 +302,7 @@ export default function contacts() {
     return (
       <TouchableOpacity
         style={[styles.row, isSaved && styles.rowSaved]}
-        onPress={() => navigateToPeer(item.dest_hash)}
+        onPress={() => navigateToPeer(item.dest_hash, item.nickname || item.announced_name)}
         activeOpacity={0.7}
       >
         <View style={styles.rowLeft}>

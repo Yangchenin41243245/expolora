@@ -164,6 +164,8 @@ export default function ChatScreen() {
   const [chatMode, setChatMode]                   = useState<ChatMode>(null);
   const [selectedPeerHash, setSelectedPeerHash]   = useState<string | null>(null);
   const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
+  // 從 contacts 頁導航時帶入的顯示名稱（用於 peer 不在 lobby 時的 fallback）
+  const [selectedPeerDisplayName, setSelectedPeerDisplayName] = useState<string | null>(null);
 
   // ── 訊息快取 ──────────────────────────────────────────────────────────────
   const chatStatesRef = useRef<Record<string, ChatState>>({});
@@ -248,11 +250,12 @@ export default function ChatScreen() {
 
   // ── 切換對話目標 ──────────────────────────────────────────────────────────
 
-  const selectPeer = useCallback((hash: string) => {
+  const selectPeer = useCallback((hash: string, displayName?: string) => {
     chatModeRef.current = 'peer';
     selectedPeerRef.current = hash;
     setChatMode('peer');
     setSelectedPeerHash(hash);
+    if (displayName) setSelectedPeerDisplayName(displayName);
     const key = `peer:${hash}`;
     setMessages(chatStatesRef.current[key]?.messages ?? []);
     void pollPeer();
@@ -269,13 +272,13 @@ export default function ChatScreen() {
   }, [pollGroup]);
 
   // ── 從 contacts tab 導航過來時自動選取目標 ───────────────────────────────
-  const { dest_hash: navDestHash, group_name: navGroupName } =
-    useLocalSearchParams<{ dest_hash?: string; group_name?: string }>();
+  const { dest_hash: navDestHash, group_name: navGroupName, peer_name: navPeerName } =
+    useLocalSearchParams<{ dest_hash?: string; group_name?: string; peer_name?: string }>();
 
   useEffect(() => {
     if (!navDestHash) return;
-    selectPeer(String(navDestHash));
-    router.setParams({ dest_hash: '' });
+    selectPeer(String(navDestHash), navPeerName ? String(navPeerName) : undefined);
+    router.setParams({ dest_hash: '', peer_name: '' });
   }, [navDestHash, selectPeer]);
 
   useEffect(() => {
@@ -294,6 +297,7 @@ export default function ChatScreen() {
     setChatMode(null);
     setSelectedPeerHash(null);
     setSelectedGroupName(null);
+    setSelectedPeerDisplayName(null);
   }, [baseUrl]);
 
   // ── 一對一輪詢 ────────────────────────────────────────────────────────────
@@ -519,6 +523,17 @@ export default function ChatScreen() {
     );
   };
 
+  const renderPeerAvatar = useCallback((_props: any) => {
+    const name = currentPeer?.nickname || currentPeer?.announced_name
+      || selectedPeerDisplayName
+      || (selectedPeerHash ? shortHash(selectedPeerHash) : '?');
+    return (
+      <View style={styles.peerAvatarCircle}>
+        <Text style={styles.peerAvatarText}>{name[0]?.toUpperCase() ?? '?'}</Text>
+      </View>
+    );
+  }, [currentPeer, selectedPeerDisplayName, selectedPeerHash]);
+
   const renderSystemMessage = (props: any) => (
     <SystemMessage {...props} containerStyle={styles.sysContainer} textStyle={styles.sysText} />
   );
@@ -573,10 +588,11 @@ export default function ChatScreen() {
               ? (isOnline ? '#00C853' : '#BBBBBB')
               : chatMode === 'group' ? '#0B6EFD' : 'transparent';
             const dotRadius = chatMode === 'group' ? 2 : 4;
+            const peerLabel = currentPeer
+              ? (currentPeer.nickname || currentPeer.announced_name || shortHash(currentPeer.dest_hash))
+              : selectedPeerDisplayName || (selectedPeerHash ? shortHash(selectedPeerHash) : 'SNS對話');
             const label = chatMode === 'peer'
-              ? currentPeer
-                ? (currentPeer.nickname || currentPeer.announced_name || shortHash(currentPeer.dest_hash))
-                : selectedPeerHash ? shortHash(selectedPeerHash) : 'SNS對話'
+              ? peerLabel
               : chatMode === 'group' && currentGroup
               ? currentGroup.group_name
               : 'SNS對話';
@@ -634,7 +650,7 @@ export default function ChatScreen() {
           renderSend={renderSend}
           renderCustomView={renderCustomView}
           renderActions={renderActions}
-          renderAvatar={isGroupMode ? undefined : null}
+          renderAvatar={isGroupMode ? undefined : renderPeerAvatar}
           messagesContainerStyle={{ backgroundColor: isGroupMode ? '#E8EFF8' : '#E5DDD5' }}
           keyboardAvoidingViewProps={{
             keyboardVerticalOffset: headerHeight,
@@ -853,4 +869,12 @@ const styles = StyleSheet.create({
   memberDotOnline:  { backgroundColor: '#00C853' },
   memberDotOffline: { backgroundColor: '#BBBBBB' },
   memberName:       { fontSize: 14, color: '#222', flex: 1 },
+
+  // ── P2P 頭像 ──
+  peerAvatarCircle: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#888888',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  peerAvatarText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });
