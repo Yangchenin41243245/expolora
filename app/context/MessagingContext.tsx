@@ -180,13 +180,11 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
   const setHost = useCallback((h: string) => {
     const trimmed = h.trim();
     setHostState(trimmed);
-    setLocalDestHash(null);
     AsyncStorage.setItem(STORAGE_KEY_HOST, trimmed).catch(() => {});
   }, []);
 
   const setPort = useCallback((p: number) => {
     setPortState(p);
-    setLocalDestHash(null);
     AsyncStorage.setItem(STORAGE_KEY_PORT, String(p)).catch(() => {});
   }, []);
 
