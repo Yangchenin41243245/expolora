@@ -618,7 +618,10 @@ export default function ChatScreen() {
           <View style={styles.memberMenu}>
             {(() => {
               const allMembers   = currentGroup.members ?? [];
-              const otherMembers = allMembers.filter(m => m.dest_hash !== localDestHash);
+              const localPrefix  = localDestHash?.slice(0, 8) ?? '';
+              const otherMembers = localPrefix
+                ? allMembers.filter(m => m.dest_hash.slice(0, 8) !== localPrefix)
+                : allMembers;
               return (
                 <>
                   <Text style={styles.memberMenuTitle}>

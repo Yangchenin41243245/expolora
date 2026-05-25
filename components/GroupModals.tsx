@@ -367,7 +367,10 @@ export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
   };
 
   const allMembers   = room.members ?? [];
-  const otherMembers = allMembers.filter(m => !localDestHash || m.dest_hash !== localDestHash);
+  const localPrefix  = localDestHash?.slice(0, 8) ?? '';
+  const otherMembers = localPrefix
+    ? allMembers.filter(m => m.dest_hash.slice(0, 8) !== localPrefix)
+    : allMembers;
   const memberCount  = allMembers.length;
 
   return (

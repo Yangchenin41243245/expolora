@@ -190,22 +190,36 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({
     AsyncStorage.setItem(STORAGE_KEY_PORT, String(p)).catch(() => {});
   }, []);
 
-  // ── 本機身份：host/port 變更時重新抓取 ──────────────
+  // ── 本機身份：host/port 變更時重新抓取，直到取得 hash 為止 ──────────────
 
   useEffect(() => {
     let cancelled = false;
     setLocalDestHash(null);
+
     const load = async () => {
+      if (cancelled) return;
       try {
         const res = await fetch(`http://${host}:${port}/identity`, {
           headers: { Accept: 'application/json' },
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (!cancelled) setTimeout(load, 4000);
+          return;
+        }
         const json = await res.json();
-        const hash = json?.destination_in?.hash;
-        if (hash && !cancelled) setLocalDestHash(hash as string);
-      } catch { /* 靜默失敗 */ }
+        const hash: string | undefined = json?.destination_in?.hash;
+        if (hash) {
+          if (!cancelled) setLocalDestHash(hash);
+        } else {
+          // RNS 節點尚未完成初始化，4 秒後重試
+          if (!cancelled) setTimeout(load, 4000);
+        }
+      } catch {
+        // 後端暫時不可達，4 秒後重試
+        if (!cancelled) setTimeout(load, 4000);
+      }
     };
+
     load();
     return () => { cancelled = true; };
   }, [host, port]);
