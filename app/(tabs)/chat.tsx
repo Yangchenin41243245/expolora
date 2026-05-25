@@ -616,23 +616,31 @@ export default function ChatScreen() {
             onPress={() => setShowMemberMenu(false)}
           />
           <View style={styles.memberMenu}>
-            <Text style={styles.memberMenuTitle}>
-              {currentGroup.group_name}  ·  {(currentGroup.members ?? []).length} 人
-            </Text>
-            {(currentGroup.members ?? []).length === 0 ? (
-              <Text style={styles.memberMenuEmpty}>尚無成員資料</Text>
-            ) : (
-              (currentGroup.members ?? []).map(member => {
-                const isOnline = lobbyPeers.find(p => p.dest_hash === member.dest_hash)?.online;
-                const name = member.display_name || shortHash(member.dest_hash);
-                return (
-                  <View key={member.dest_hash} style={styles.memberRow}>
-                    <View style={[styles.memberDot, isOnline ? styles.memberDotOnline : styles.memberDotOffline]} />
-                    <Text style={styles.memberName} numberOfLines={1}>{name}</Text>
-                  </View>
-                );
-              })
-            )}
+            {(() => {
+              const allMembers   = currentGroup.members ?? [];
+              const otherMembers = allMembers.filter(m => m.dest_hash !== localDestHash);
+              return (
+                <>
+                  <Text style={styles.memberMenuTitle}>
+                    {currentGroup.group_name}  ·  {allMembers.length} 人
+                  </Text>
+                  {otherMembers.length === 0 ? (
+                    <Text style={styles.memberMenuEmpty}>尚無其他成員</Text>
+                  ) : (
+                    otherMembers.map(member => {
+                      const isOnline = lobbyPeers.find(p => p.dest_hash === member.dest_hash)?.online;
+                      const name = member.display_name || shortHash(member.dest_hash);
+                      return (
+                        <View key={member.dest_hash} style={styles.memberRow}>
+                          <View style={[styles.memberDot, isOnline ? styles.memberDotOnline : styles.memberDotOffline]} />
+                          <Text style={styles.memberName} numberOfLines={1}>{name}</Text>
+                        </View>
+                      );
+                    })
+                  )}
+                </>
+              );
+            })()}
           </View>
         </>
       )}

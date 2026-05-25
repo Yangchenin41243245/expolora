@@ -345,6 +345,7 @@ export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({ onClose, onJoin 
 
 export type GroupDetailModalProps = {
   room: GroupRoom;
+  localDestHash?: string | null;
   onClose: () => void;
   onRename: (self_name: string) => Promise<void>;
   onAddMembers: () => void;
@@ -352,7 +353,7 @@ export type GroupDetailModalProps = {
 };
 
 export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
-  room, onClose, onRename, onAddMembers, onUnregister,
+  room, localDestHash, onClose, onRename, onAddMembers, onUnregister,
 }) => {
   const [newSelfName, setNewSelfName] = useState(room.self_name ?? '');
   const [saving, setSaving]           = useState<string | null>(null);
@@ -365,7 +366,9 @@ export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
     finally { setSaving(null); }
   };
 
-  const memberCount = room.members?.length ?? 0;
+  const allMembers   = room.members ?? [];
+  const otherMembers = allMembers.filter(m => !localDestHash || m.dest_hash !== localDestHash);
+  const memberCount  = allMembers.length;
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -417,7 +420,7 @@ export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
               <View style={styles.fieldBlock}>
                 <Text style={styles.fieldLabel}>成員列表</Text>
                 <View style={styles.memberListBox}>
-                  {room.members!.map((m, i) => (
+                  {otherMembers.map((m, i) => (
                     <View key={m.dest_hash} style={[styles.memberRow, i > 0 && styles.memberRowBorder]}>
                       <View style={styles.memberAvatar}>
                         <Text style={styles.memberAvatarText}>

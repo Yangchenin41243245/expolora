@@ -77,6 +77,7 @@ const formatTime = (ts?: number) => {
 export default function contacts() {
   const {
     baseUrl,
+    localDestHash,
     groupRooms, groupsLoading,
     refreshGroups, registerGroup, unregisterGroup,
   } = useMessaging();
@@ -375,7 +376,20 @@ export default function contacts() {
       }}>
         <TouchableOpacity
           style={styles.groupRow}
-          onPress={() => navigateToGroup(item.group_name)}
+          onPress={() => {
+            if (!item.self_name) {
+              Alert.alert(
+                '請先設定顯示名稱',
+                '你尚未設定在此群組中的名稱，請先設定後再進入群組。',
+                [
+                  { text: '取消', style: 'cancel' },
+                  { text: '去設定', onPress: () => setScene({ type: 'detail', room: item }) },
+                ],
+              );
+            } else {
+              navigateToGroup(item.group_name);
+            }
+          }}
           activeOpacity={0.75}
         >
           <View style={styles.groupColorBar} />
@@ -660,6 +674,7 @@ export default function contacts() {
       {scene.type === 'detail' && (
         <GroupDetailModal
           room={scene.room}
+          localDestHash={localDestHash}
           onClose={() => setScene({ type: 'none' })}
           onRename={async (self_name) => {
             try {
