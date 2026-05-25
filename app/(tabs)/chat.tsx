@@ -573,8 +573,10 @@ export default function ChatScreen() {
               ? (isOnline ? '#00C853' : '#BBBBBB')
               : chatMode === 'group' ? '#0B6EFD' : 'transparent';
             const dotRadius = chatMode === 'group' ? 2 : 4;
-            const label = chatMode === 'peer' && currentPeer
-              ? (currentPeer.nickname || currentPeer.announced_name || shortHash(currentPeer.dest_hash))
+            const label = chatMode === 'peer'
+              ? currentPeer
+                ? (currentPeer.nickname || currentPeer.announced_name || shortHash(currentPeer.dest_hash))
+                : selectedPeerHash ? shortHash(selectedPeerHash) : 'SNS對話'
               : chatMode === 'group' && currentGroup
               ? currentGroup.group_name
               : 'SNS對話';
@@ -632,6 +634,7 @@ export default function ChatScreen() {
           renderSend={renderSend}
           renderCustomView={renderCustomView}
           renderActions={renderActions}
+          renderAvatar={isGroupMode ? undefined : null}
           messagesContainerStyle={{ backgroundColor: isGroupMode ? '#E8EFF8' : '#E5DDD5' }}
           keyboardAvoidingViewProps={{
             keyboardVerticalOffset: headerHeight,

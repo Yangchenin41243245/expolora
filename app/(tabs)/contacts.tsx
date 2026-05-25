@@ -298,7 +298,7 @@ export default function contacts() {
   // ── Lobby 列表項目 ──────────────────────────────────────────────────────────
 
   const LobbyRow = ({ item }: { item: LobbyPeer }) => {
-    const isSaved = item.is_saved_contact;
+    const isSaved = item.is_saved_contact || contacts.some(c => c.dest_hash === item.dest_hash);
     return (
       <TouchableOpacity
         style={[styles.row, isSaved && styles.rowSaved]}
