@@ -1,11 +1,11 @@
 // filepath: app/(tabs)/broadcast_chat.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useHeaderHeight } from '@react-navigation/elements';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -43,7 +43,6 @@ const formatTime = (ts: number) => {
 
 export default function BroadcastChat() {
   const { baseUrl, localDestHash } = useMessaging();
-  const headerHeight = useHeaderHeight();
 
   const [bcasterDest, setBcasterDest] = useState<string | null>(null);
   const [messages, setMessages]       = useState<DisplayMsg[]>([]);
@@ -129,7 +128,7 @@ export default function BroadcastChat() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior="padding"
-      keyboardVerticalOffset={headerHeight}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 110}
     >
       {/* 訊息列表 */}
       {!bcasterDest ? (
