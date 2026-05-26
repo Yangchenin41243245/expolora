@@ -127,13 +127,13 @@ LOCATION_MESSAGE_RE = /(?:📍\s*)?Location:\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:
 
 ### 過濾機制
 
-接收到的 P2P 訊息會過濾掉 `packet_type` 為 `"group"`、`"group_system"`、`"broadcast"` 的 JSON 封包（群組控制封包透過 P2P 通道傳送所產生的副本）：
+接收到的 P2P 訊息會過濾掉 `packet_type`（或緊湊鍵 `pkt_type`）為 `"group"`、`"group_system"`、`"broadcast"` 的 JSON 封包（群組／廣播控制封包透過 P2P 通道傳送所產生的副本）：
 
 ```typescript
 const isGroupPacket = (content?: string): boolean => {
   try {
     const p = JSON.parse(content);
-    const pt: string = p.packet_type;
+    const pt: string = p.packet_type ?? p.pkt_type;
     return pt === 'group' || pt === 'group_system' || pt === 'broadcast';
   } catch { return false; }
 };
@@ -150,7 +150,46 @@ const isGroupPacket = (content?: string): boolean => {
 
 ---
 
-## Tab 3：設定與診斷頁（`app/(tabs)/j_settings.tsx`）
+## Tab 3：廣播頻道（`app/(tabs)/broadcast_chat.tsx`）
+
+### 功能概述
+
+透過 RNS PLAIN 廣播目的地（所有節點共享）發送與接收廣播訊息。無群組、無成員概念，純粹的廣播訊息輸入／輸出頁面。
+
+### 介面元素
+
+- **訊息列表**：自己發出的訊息靠右（淡黃底色 `#fff171`），收到的靠左（灰底 `#E4E4E4`）
+- **寄件人標籤**：他人訊息上方顯示 `from_hash` 前 8 字元
+- **時間戳**：每則訊息底部顯示 `HH:MM`
+- **輸入列**：文字輸入框 + 送出按鈕
+- **空狀態提示**：首次使用前顯示「送出第一則訊息以加入廣播頻道」
+
+### 廣播頻道初始化流程
+
+1. 啟動時從 AsyncStorage（`bcaster_dest_hash`）嘗試恢復已知的廣播目的地 hash
+2. 若無，需要先送出一則訊息
+3. 送出成功後，從後端回應的 `data.dest_hash` 取得廣播目的地 hash 並存入 AsyncStorage
+4. 取得 hash 後才啟動 4,000 ms 輪詢抓取歷史訊息
+
+### 使用的 API
+
+| 用途 | 端點 | 方法 | Body / 說明 |
+|------|------|------|-------------|
+| 送出廣播 | `/broadcaster/send` | POST | `{ sender_name, message }` → 回應包含 `data.dest_hash` |
+| 抓取歷史 | `/broadcaster/history/{dest_hash}` | GET | 回傳 `data.messages[]` |
+
+### 訊息方向判斷
+
+| 欄位 | 說明 |
+|------|------|
+| `status === 'send_pending'` | 自己發出的訊息（右側） |
+| 其餘（`'received'` 等） | 收到的訊息（左側） |
+
+> 廣播歷史在後端重啟後不會自動恢復記憶體（僅儲存至磁碟，不在啟動時載回），前端重啟後須等新訊息進來才能重建顯示。
+
+---
+
+## Tab 4：設定與診斷頁（`app/(tabs)/j_settings.tsx`）
 
 ### 功能概述
 
@@ -161,10 +200,10 @@ const isGroupPacket = (content?: string): boolean => {
 | 區塊 | 說明 |
 |------|------|
 | 端點設定 | 修改 Host / Port，即時生效 |
+| 本機 Hash | 顯示本機 RNS 節點的 dest_hash（`尚未取得` 表示尚未連線） |
 | 端點診斷 | 依序測試各 API 端點並顯示回應 |
 | 群組 Debug | 列出所有群組詳細資訊及 JSON 原始回應 |
 | 自動刷新 | 每 5 秒自動重新查詢所有診斷資料 |
-| 測試發送 | 對指定節點發送測試訊息 |
 
 ### 診斷的 API 端點
 

@@ -20,16 +20,17 @@ Expo Router 採用**檔案即路由**的設計，整個應用的路由結構如�
 
 ```
 app/
-├── _layout.tsx          ← 根層 Layout（初始化離線地圖）
-├── modal.tsx            ← 通用模態頁面（保留位）
-└── (tabs)/              ← 標籤頁群組
-    ├── _layout.tsx      ← 標籤欄定義 + MessagingProvider 注入
-    ├── index.tsx        ← 重導向至 /contacts（href: null，不顯示 tab）
-    ├── contacts.tsx     ← Tab 1：聯絡人與群組管理（CONTACTS）
-    ├── chat.tsx         ← Tab 2：聊天對話（CHAT）
-    ├── groups.tsx       ← 已刪除（href: null，功能整合至 contacts.tsx）
-    ├── identity.tsx     ← 隱藏頁（href: null）
-    └── j_settings.tsx   ← Tab 3：設定與診斷（SETTINGS）
+├── _layout.tsx              ← 根層 Layout（初始化離線地圖）
+├── modal.tsx                ← 通用模態頁面（保留位）
+└── (tabs)/                  ← 標籤頁群組
+    ├── _layout.tsx          ← 標籤欄定義 + MessagingProvider 注入
+    ├── index.tsx            ← 重導向至 /contacts（href: null，不顯示 tab）
+    ├── contacts.tsx         ← Tab 1：聯絡人與群組管理（CONTACTS）
+    ├── chat.tsx             ← Tab 2：聊天對話（CHAT）
+    ├── broadcast_chat.tsx   ← Tab 3：廣播頻道（BROADCAST）
+    ├── j_settings.tsx       ← Tab 4：設定與診斷（SETTINGS）
+    ├── groups.tsx           ← 已刪除（href: null，功能整合至 contacts.tsx）
+    └── identity.tsx         ← 隱藏頁（href: null）
 ```
 
 ### 根層 `_layout.tsx`
@@ -61,10 +62,10 @@ app/
 │  │  - registerGroup / unregisterGroup        │    │
 │  └──────────────────────────────────────────┘    │
 │         │              │              │           │
-│   ┌─────┴─────┐  ┌─────┴────┐  ┌────┴──────┐   │
-│   │  chat.tsx  │  │contacts  │  │j_settings │   │
-│   │  (Chat)    │  │ .tsx     │  │   .tsx    │   │
-│   └─────┬─────┘  └──────────┘  └───────────┘   │
+│   ┌──────┴─────┐  ┌──────┴────┐  ┌──────┴──────┐  ┌──────┴────┐  │
+│   │  chat.tsx   │  │contacts   │  │broadcast    │  │j_settings │  │
+│   │  (Chat)     │  │ .tsx      │  │_chat.tsx    │  │  .tsx     │  │
+│   └──────┬──────┘  └───────────┘  └─────────────┘  └───────────┘  │
 │         │                                        │
 │   ┌─────┴──────────────────────────────────┐    │
 │   │         HTTP REST API（Flask）           │    │
@@ -123,6 +124,7 @@ app/
 | 群組清單 | 10,000 ms | MessagingContext | 持續輪詢 |
 | P2P 聊天訊息 | 4,000 ms | chat.tsx `pollPeer` | 切換節點時亦立即觸發 |
 | 群組聊天訊息 | 5,000 ms | chat.tsx `pollGroup` | 切換群組時亦立即觸發 |
+| 廣播訊息 | 4,000 ms | broadcast_chat.tsx | `bcasterDest` 可用後才啟動輪詢 |
 
 ### 立即觸發機制
 
@@ -136,7 +138,8 @@ app/
 
 | 資料 | 儲存位置 | 說明 |
 |------|----------|------|
-| 後端連線設定 | AsyncStorage | 跨重啟保留 |
+| 後端連線設定 | AsyncStorage（`saved_host`、`saved_port`） | 跨重啟保留 |
+| 廣播頻道目的地 hash | AsyncStorage（`bcaster_dest_hash`） | 首次發送後從後端取得並持久化 |
 | 群組狀態 | 後端 Flask（source of truth） | `refreshGroups()` 每次輪詢由後端 `/getGroups` 覆寫，重裝後自動恢復 |
 | 聊天訊息 | 後端 Flask | 完全由後端管理，前端不快取至磁碟 |
 | 聯絡人 / 封鎖名單 | 後端 Flask | 同上 |

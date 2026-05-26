@@ -98,6 +98,28 @@ type RawGroupMsg = {
 };
 ```
 
+### `app/(tabs)/broadcast_chat.tsx`（本地型別）
+
+```typescript
+// 來自後端 /broadcaster/history/{dest_hash} 的原始訊息
+type RawMsg = {
+  message_id?: string;
+  timestamp?:  number;   // Unix 秒
+  from_hash?:  string;   // 廣播 PLAIN 目的地 hash（非發送者身份 hash）
+  content?:    string;
+  status?:     string;   // 'send_pending' = 自己發的
+};
+
+// 渲染用訊息
+type DisplayMsg = {
+  id:        string;
+  timestamp: number;
+  from_hash: string;
+  content:   string;
+  isSelf:    boolean;   // status === 'send_pending'
+};
+```
+
 ---
 
 ## 後端 API 回應 JSON 格式
@@ -223,6 +245,48 @@ type RawGroupMsg = {
 }
 ```
 
+### `POST /broadcaster/send`
+
+發送廣播訊息。首次呼叫可從回應中取得廣播 PLAIN 目的地 hash。
+
+請求 Body：
+```json
+{ "sender_name": "a1b2c3d4", "message": "Hello world" }
+```
+
+回應：
+```json
+{
+  "data": {
+    "dest_hash":  "f7e8d9c0b1a2f3e4d5c6b7a8f9e0d1c2",
+    "message_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status":     "queued"
+  }
+}
+```
+
+### `GET /broadcaster/history/{dest_hash}`
+
+取得廣播頻道歷史訊息。`dest_hash` 為廣播 PLAIN 目的地 hash（非個人身份 hash）。
+
+```json
+{
+  "data": {
+    "messages": [
+      {
+        "message_id": "550e8400-e29b-41d4-a716-446655440000",
+        "timestamp":  1715000000,
+        "from_hash":  "f7e8d9c0b1a2f3e4d5c6b7a8f9e0d1c2",
+        "content":    "Hello world",
+        "status":     "send_pending"
+      }
+    ]
+  }
+}
+```
+
+> `from_hash` 為廣播 PLAIN 目的地 hash，所有訊息的 `from_hash` 相同（非各別發送者身份）。`status === 'send_pending'` 標識自己發出的訊息，其餘為收到的訊息。
+
 ---
 
 ## 群組封包格式（P2P 通道中的群組控制訊息）
@@ -238,7 +302,8 @@ const isGroupPacket = (content?: string): boolean => {
   try {
     const p = JSON.parse(content);
     if (typeof p !== 'object' || p === null) return false;
-    const pt: string = p.packet_type;
+    // packet_type = 舊版欄位；pkt_type = 新版緊湊欄位
+    const pt: string = p.packet_type ?? p.pkt_type;
     return pt === 'group' || pt === 'group_system' || pt === 'broadcast';
   } catch { return false; }
 };
@@ -256,7 +321,9 @@ const converted = rawMsgs
 **過濾邏輯**：
 - `content` 為空或非字串 → `false`（保留訊息）
 - `JSON.parse` 失敗（純文字訊息）→ `false`（保留訊息）
-- 解析後物件的 `packet_type` 為 `"group"` / `"group_system"` / `"broadcast"` → `true`（過濾掉）
+- 解析後物件的 `packet_type`（或緊湊鍵 `pkt_type`）為 `"group"` / `"group_system"` / `"broadcast"` → `true`（過濾掉）
+
+> **緊湊鍵說明**：新版廣播封包（`broadcaster.py`）使用 `pkt_type` 而非 `packet_type`，後端 `on_packet` 兩者都接受（`contents.get("pkt_type") or contents.get("packet_type")`）。前端過濾邏輯亦應同時檢查兩個鍵。
 
 ### 群組封包通用格式
 
