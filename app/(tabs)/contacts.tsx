@@ -138,7 +138,7 @@ export default function contacts() {
     try {
       const json = await apiFetch('/getLobby');
       const peers: LobbyPeer[] = json?.data?.lobby ?? [];
-      setLobbyPeers(peers.filter(p => p.announced_name !== 'Unknown'));
+      setLobbyPeers(peers.filter(p => p.announced_name !== 'Unknown' && p.online !== false));
     } catch { setLobbyPeers([]); }
   }, [apiFetch]);
 
