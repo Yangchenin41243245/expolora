@@ -55,6 +55,16 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="broadcast_chat"
+          options={{
+            title: '廣播頻道',
+            tabBarLabel: 'BROADCAST',
+            tabBarIcon: ({ color }) => (
+              <Text style={{ fontSize: 24, color }}>📡</Text>
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="j_settings"
           options={{
             title: '設定',
