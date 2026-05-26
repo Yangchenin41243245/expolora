@@ -1,11 +1,11 @@
 // filepath: app/(tabs)/broadcast_chat.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useHeaderHeight } from '@react-navigation/elements';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
-  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -43,6 +43,7 @@ const formatTime = (ts: number) => {
 
 export default function BroadcastChat() {
   const { baseUrl, localDestHash } = useMessaging();
+  const headerHeight = useHeaderHeight();
 
   const [bcasterDest, setBcasterDest] = useState<string | null>(null);
   const [messages, setMessages]       = useState<DisplayMsg[]>([]);
@@ -51,7 +52,6 @@ export default function BroadcastChat() {
 
   const bcasterDestRef = useRef<string | null>(null);
   const baseUrlRef     = useRef(baseUrl);
-  const listRef        = useRef<FlatList<DisplayMsg>>(null);
 
   useEffect(() => { bcasterDestRef.current = bcasterDest; }, [bcasterDest]);
   useEffect(() => { baseUrlRef.current = baseUrl; },        [baseUrl]);
@@ -84,7 +84,7 @@ export default function BroadcastChat() {
           content:   m.content!,
           isSelf:    m.status === 'send_pending',
         }))
-        .sort((a, b) => a.timestamp - b.timestamp);
+        .sort((a, b) => b.timestamp - a.timestamp);
       setMessages(converted);
     } catch { /* 靜默失敗 */ }
   }, []);
@@ -96,13 +96,6 @@ export default function BroadcastChat() {
     const t = setInterval(fetchHistory, POLL_MS);
     return () => clearInterval(t);
   }, [bcasterDest, fetchHistory]);
-
-  // 新訊息時捲到底部
-  useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
-    }
-  }, [messages.length]);
 
   // 送出廣播
   const handleSend = async () => {
@@ -136,7 +129,7 @@ export default function BroadcastChat() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'android' ? 100 : 0}
+      keyboardVerticalOffset={headerHeight}
     >
       {/* 訊息列表 */}
       {!bcasterDest ? (
@@ -146,7 +139,7 @@ export default function BroadcastChat() {
         </View>
       ) : (
         <FlatList
-          ref={listRef}
+          inverted
           data={messages}
           keyExtractor={m => m.id}
           contentContainerStyle={styles.listContent}
