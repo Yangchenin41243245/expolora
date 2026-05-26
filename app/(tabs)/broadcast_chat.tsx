@@ -136,7 +136,7 @@ export default function BroadcastChat() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'android' ? 88 : 0}
+      keyboardVerticalOffset={Platform.OS === 'android' ? 20 : 0}
     >
       {/* 訊息列表 */}
       {!bcasterDest ? (
