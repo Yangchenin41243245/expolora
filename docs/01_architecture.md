@@ -42,7 +42,7 @@ app/
 ### 標籤 `(tabs)/_layout.tsx`
 
 - 以 `MessagingProvider` 包裹所有標籤頁，使共享狀態全域可用
-- 定義三個可見標籤：CONTACTS、CHAT、SETTINGS
+- 定義四個可見標籤：CONTACTS、CHAT、BROADCAST、SETTINGS
 - 各標籤有對應圖示（Emoji）
 
 ---
@@ -187,7 +187,7 @@ Web 平台透過 platform-specific 副檔名實現差異化：
 
 **根因**：RNS 以 P2P 連線傳送群組控制封包，後端將其存入直接訊息記錄。
 
-**修復方式**：`chat.tsx` 中的 `isGroupPacket()` 在訊息轉換前過濾掉這類封包，偵測 `packet_type` 欄位（`group`、`group_system`、`broadcast`）。
+**修復方式**：`chat.tsx` 中的 `isGroupPacket()` 在訊息轉換前過濾掉這類封包，同時偵測 `packet_type`（舊版）與緊湊鍵 `pkt_type`（新版），值為 `group`、`group_system`、`broadcast` 時過濾。
 
 ---
 

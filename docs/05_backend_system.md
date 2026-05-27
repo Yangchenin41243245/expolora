@@ -184,4 +184,4 @@ Flask 預設為同步 WSGI，無法維持長連線。前端每隔數秒以 HTTP 
 
 - **單執行緒**：Flask dev server 同時只處理一個請求，高頻輪詢下可能有輕微延遲
 - **群組封包透過 P2P 通道傳送**：RNS 群組控制訊息（邀請、加入確認）以 JSON 封包透過點對點連線傳遞，後端將其存入直接訊息記錄，前端必須用 `isGroupPacket()` 過濾
-- **RNS MTU 限制（約 500 bytes）**：GROUP 封包不攜帶完整成員清單，成員清單僅在 GROUP_SYSTEM 封包中傳送，以避免超出 MTU
+- **RNS MTU 限制（約 500 bytes）**：`gs:f`（群組建立封包）若攜帶多位成員的 `mlist` 即超出後端 `MAX_GROUP_PACKET_BYTES = 440` 限制。前端的因應做法是：建立群組時不帶任何成員（`members: []`），建立後對每位受邀者各單獨呼叫一次 `/addGroupMembers`（`gs:a` 封包只含單一 hash，體積安全）

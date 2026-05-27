@@ -52,13 +52,22 @@
 
 | 操作 | 端點 | Body |
 |------|------|------|
-| 建立群組 | `POST /newGroup` | `{ group_name, self_name, members[], invite_message? }` |
+| 建立群組 | `POST /newGroup` | `{ group_name, self_name, members: [] }` — 前端建立時固定不帶成員，成員透過後續邀請加入 |
 | 加入群組 | `POST /joinGroup` | `{ group_name, self_name }` |
-| 新增成員 | `POST /addGroupMembers` | `{ group_id, group_name, members[], invite_message? }` |
+| 新增成員 | `POST /addGroupMembers` | `{ group_id, group_name, members: [單一成員], invite_message? }` — 前端逐人單發，每次只傳一位成員以避免封包超出 RNS MTU |
 | 修改顯示名稱 | `POST /setSelfDisplayName` | `{ group_id, group_name, self_name }` |
 | 離開群組 | `POST /leaveGroup` | `{ group_id }` |
 
 > `group_id` 為後端分配的 UUID，建立或加入群組後由 API 回應的 `data.group_room.group_id` 取得。所有需要識別群組的操作均優先傳送 `group_id`。
+
+#### 邀請流程說明
+
+群組建立與邀請拆分為兩個獨立步驟，原因是 RNS MTU 約 500 bytes，`gs:f`（建立封包）若攜帶多位成員的完整 `mlist` 即超出上限：
+
+1. **建立**：`POST /newGroup`，`members: []`，後端建立群組並回傳 `group_room`（含 `group_id`）
+2. **邀請**：對每位受邀者各呼叫一次 `POST /addGroupMembers`，`members` 僅含該單一成員
+
+每次 `/addGroupMembers` 後端發出 `gs:a`（add-delta）封包，僅含新成員的 hash，體積遠小於 MTU 限制。
 
 ### 群組詳細 Modal 的資料更新機制
 
@@ -70,7 +79,7 @@
 
 ### 注意事項
 
-- Lobby 節點列表過濾掉 `announced_name === 'Unknown'` 的條目（本機節點）
+- Lobby 節點列表過濾掉 `announced_name === 'Unknown'` 的條目（本機節點），並過濾掉 `online === false` 的離線節點
 - `registerGroup(room)` 在建立或加入群組後立即將後端回傳的 `GroupRoom`（含 `group_id`）寫入本地狀態，不需等待下次輪詢
 
 ---
@@ -236,7 +245,7 @@ const isGroupPacket = (content?: string): boolean => {
 
 | 元件 | 功能 |
 |------|------|
-| `CreateGroupModal` | 建立新群組（名稱、顯示名稱、邀請成員） |
+| `CreateGroupModal` | 建立新群組（名稱、顯示名稱）；建立時不邀請成員，建立後透過 `AddMembersModal` 逐一邀請 |
 | `JoinGroupModal` | 輸入群組名稱與顯示名稱加入群組 |
 | `GroupDetailModal` | 查看成員、修改顯示名稱、新增成員、離開群組 |
 | `AddMembersModal` | 從 Lobby 選取節點並發送邀請 |
