@@ -219,11 +219,8 @@ export default function contacts() {
     } catch { return null; }
   }, [baseUrl]);
 
-  const createGroup = useCallback(async (
-    group_name: string, self_name: string,
-    members: GroupMember[], invite_message: string,
-  ) => {
-    const json = await apiPost('/newGroup', { group_name, self_name, members, invite_message: invite_message || undefined });
+  const createGroup = useCallback(async (group_name: string, self_name: string) => {
+    const json = await apiPost('/newGroup', { group_name, self_name, members: [] });
     const room: GroupRoom | undefined = json?.data?.group_room;
     if (room) await registerGroup(room);
   }, [apiPost, registerGroup]);
@@ -237,7 +234,14 @@ export default function contacts() {
   const addMembers = useCallback(async (
     room: GroupRoom, members: GroupMember[], invite_message: string,
   ) => {
-    await apiPost('/addGroupMembers', { group_id: room.group_id, group_name: room.group_name, members, invite_message: invite_message || undefined });
+    for (const member of members) {
+      await apiPost('/addGroupMembers', {
+        group_id: room.group_id,
+        group_name: room.group_name,
+        members: [member],
+        invite_message: invite_message || undefined,
+      });
+    }
     await refreshGroups();
   }, [apiPost, refreshGroups]);
 
@@ -646,10 +650,9 @@ export default function contacts() {
       {/* ── 群組 Modals ── */}
       {scene.type === 'create' && (
         <CreateGroupModal
-          lobbyPeers={lobbyPeers}
           onClose={() => setScene({ type: 'none' })}
-          onCreate={async (group_name, self_name, members, invite_message) => {
-            await createGroup(group_name, self_name, members, invite_message);
+          onCreate={async (group_name, self_name) => {
+            await createGroup(group_name, self_name);
             setScene({ type: 'none' });
             await handleGroupRefresh();
           }}

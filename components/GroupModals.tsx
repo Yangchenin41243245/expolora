@@ -65,39 +65,17 @@ const utf8ByteLen = (s: string): number => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type CreateGroupModalProps = {
-  lobbyPeers: ReturnType<typeof useMessaging>['lobbyPeers'];
   onClose: () => void;
-  onCreate: (
-    group_name: string,
-    self_name: string,
-    members: GroupMember[],
-    invite_message: string,
-  ) => Promise<void>;
+  onCreate: (group_name: string, self_name: string) => Promise<void>;
 };
 
 export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
-  lobbyPeers: lobbyPeersProp, onClose, onCreate,
+  onClose, onCreate,
 }) => {
-  const lobbyPeers = lobbyPeersProp ?? [];
-  const [groupName, setGroupName]           = useState('');
-  const [selfName, setSelfName]             = useState('');
-  const [inviteMsg, setInviteMsg]           = useState('');
-  const [selectedHashes, setSelectedHashes] = useState<Set<string>>(new Set());
-  const [displayNames, setDisplayNames]     = useState<Record<string, string>>({});
-  const [loading, setLoading]               = useState(false);
-  const [errorMsg, setErrorMsg]             = useState('');
-
-  const togglePeer = (dest_hash: string) => {
-    setSelectedHashes(prev => {
-      const next = new Set(prev);
-      if (next.has(dest_hash)) {
-        next.delete(dest_hash);
-      } else if (next.size < MAX_MEMBERS_PER_OP) {
-        next.add(dest_hash);
-      }
-      return next;
-    });
-  };
+  const [groupName, setGroupName] = useState('');
+  const [selfName, setSelfName]   = useState('');
+  const [loading, setLoading]     = useState(false);
+  const [errorMsg, setErrorMsg]   = useState('');
 
   const handleCreate = async () => {
     setErrorMsg('');
@@ -105,20 +83,13 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
     if (utf8ByteLen(groupName.trim()) > MAX_GROUP_NAME_BYTES) {
       setErrorMsg(`群組名稱不能超過 ${MAX_GROUP_NAME_BYTES} bytes`); return;
     }
-    if (!selfName.trim())  { setErrorMsg('請輸入你在群組中的顯示名稱'); return; }
+    if (!selfName.trim()) { setErrorMsg('請輸入你在群組中的顯示名稱'); return; }
     if (utf8ByteLen(selfName.trim()) > MAX_USER_NAME_BYTES) {
       setErrorMsg(`顯示名稱不能超過 ${MAX_USER_NAME_BYTES} bytes`); return;
     }
-    if (selectedHashes.size > MAX_MEMBERS_PER_OP) {
-      setErrorMsg(`每次最多邀請 ${MAX_MEMBERS_PER_OP} 位成員`); return;
-    }
-    const members: GroupMember[] = [...selectedHashes].map(h => ({
-      dest_hash: h,
-      display_name: displayNames[h]?.trim() || undefined,
-    }));
     setLoading(true);
     try {
-      await onCreate(groupName.trim(), selfName.trim(), members, inviteMsg.trim());
+      await onCreate(groupName.trim(), selfName.trim());
     } catch (e: any) {
       setErrorMsg(e?.message ?? '建立失敗');
     } finally {
@@ -171,65 +142,6 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               />
             </View>
 
-            <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>邀請訊息（選填）</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={inviteMsg}
-                onChangeText={setInviteMsg}
-                placeholder="附在邀請封包中的訊息"
-                placeholderTextColor={C.textMute}
-              />
-            </View>
-
-            <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>
-                邀請 Lobby 節點（選填） · 已選 {selectedHashes.size} 人
-              </Text>
-              {lobbyPeers.length === 0 ? (
-                <View style={styles.emptyPeerBox}>
-                  <Text style={styles.emptyPeerText}>Lobby 中目前無可邀請的節點</Text>
-                </View>
-              ) : (
-                lobbyPeers.map(peer => {
-                  const selected = selectedHashes.has(peer.dest_hash);
-                  const name = peer.nickname || peer.announced_name || shortHash(peer.dest_hash);
-                  return (
-                    <View key={peer.dest_hash}>
-                      <TouchableOpacity
-                        style={[styles.peerPickRow, selected && styles.peerPickRowSelected]}
-                        onPress={() => togglePeer(peer.dest_hash)}
-                        activeOpacity={0.75}
-                      >
-                        <View style={[styles.peerPickCheck, selected && styles.peerPickCheckActive]}>
-                          {selected && <Text style={styles.checkMark}>✓</Text>}
-                        </View>
-                        <View style={styles.peerPickAvatar}>
-                          <Text style={styles.peerPickAvatarText}>{name[0].toUpperCase()}</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.peerPickName}>{name}</Text>
-                          <Text style={styles.peerPickHash}>{shortHash(peer.dest_hash)}</Text>
-                        </View>
-                        <View style={[styles.onlineDot, peer.online ? styles.dotOn : styles.dotOff]} />
-                      </TouchableOpacity>
-                      {selected && (
-                        <View style={styles.displayNameRow}>
-                          <TextInput
-                            style={styles.displayNameInput}
-                            value={displayNames[peer.dest_hash] ?? ''}
-                            onChangeText={v => setDisplayNames(prev => ({ ...prev, [peer.dest_hash]: v }))}
-                            placeholder={`${name} 的群組顯示名稱（選填）`}
-                            placeholderTextColor={C.textMute}
-                          />
-                        </View>
-                      )}
-                    </View>
-                  );
-                })
-              )}
-            </View>
-
             <TouchableOpacity
               style={[styles.primaryBtn, loading && styles.btnLoading]}
               onPress={handleCreate}
@@ -237,7 +149,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
             >
               {loading
                 ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={styles.primaryBtnText}>◈ 建立群組並發送邀請</Text>
+                : <Text style={styles.primaryBtnText}>◈ 建立群組</Text>
               }
             </TouchableOpacity>
 
