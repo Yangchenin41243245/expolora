@@ -23,6 +23,7 @@ import {
 } from 'react-native-gifted-chat';
 
 import LocationMessageBubble from '../../components/LocationMessageBubble';
+import { useNotificationSound } from '../../hooks/useNotificationSound';
 import type { DeliveryStatus, LocationMessage, LocationPayload } from '../../types/chat';
 import { getCurrentLocation } from '../../utils/location';
 import { useMessaging } from '../context/MessagingContext';
@@ -149,6 +150,7 @@ const rawGroupMsgToIMessage = (
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ChatScreen() {
+  const playNotificationSound = useNotificationSound();
   const {
     baseUrl,
     localDestHash,
@@ -198,13 +200,16 @@ export default function ChatScreen() {
   // ── 快取更新：透過 ref 讀取當前狀態，避免 setState 觸發 effect ───────────
   const applyMessages = useCallback((key: string, msgs: LocationMessage[], knownCount?: number) => {
     const prev = chatStatesRef.current[key] ?? { messages: [], knownCount: 0 };
+    if (prev.messages.length > 0 && msgs.length > prev.messages.length) {
+      void playNotificationSound();
+    }
     chatStatesRef.current[key] = { messages: msgs, knownCount: knownCount ?? prev.knownCount };
     const mode  = chatModeRef.current;
     const pHash = selectedPeerRef.current;
     const gName = selectedGroupRef.current;
     const curKey = mode === 'peer' ? `peer:${pHash}` : mode === 'group' ? `group:${gName}` : '';
     if (curKey === key) setMessages(msgs);
-  }, []);
+  }, [playNotificationSound]);
 
   // ── 輪詢函式（抽出為 useCallback 供 select* 切換後立即觸發）─────────────
   const pollPeer = useCallback(async () => {

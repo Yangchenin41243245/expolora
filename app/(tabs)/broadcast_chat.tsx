@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-controller';
+import { useNotificationSound } from '../../hooks/useNotificationSound';
 import { useMessaging } from '../context/MessagingContext';
 
 const POLL_MS = 4000;
@@ -48,6 +49,7 @@ const formatTime = (ts: number) => {
 
 export default function BroadcastChat() {
   const headerHeight = useHeaderHeight();
+  const playNotificationSound = useNotificationSound();
   const { baseUrl, localDestHash } = useMessaging();
 
   const [bcasterDest, setBcasterDest] = useState<string | null>(null);
@@ -55,8 +57,9 @@ export default function BroadcastChat() {
   const [inputText, setInputText]     = useState('');
   const [sending, setSending]         = useState(false);
 
-  const bcasterDestRef = useRef<string | null>(null);
-  const baseUrlRef     = useRef(baseUrl);
+  const bcasterDestRef  = useRef<string | null>(null);
+  const baseUrlRef      = useRef(baseUrl);
+  const prevMsgCountRef = useRef<number | null>(null);
 
   useEffect(() => { bcasterDestRef.current = bcasterDest; }, [bcasterDest]);
   useEffect(() => { baseUrlRef.current = baseUrl; },        [baseUrl]);
@@ -90,9 +93,13 @@ export default function BroadcastChat() {
           isSelf:    m.status === 'send_pending',
         }))
         .sort((a, b) => b.timestamp - a.timestamp);
+      if (prevMsgCountRef.current !== null && converted.length > prevMsgCountRef.current) {
+        void playNotificationSound();
+      }
+      prevMsgCountRef.current = converted.length;
       setMessages(converted);
     } catch { /* 靜默失敗 */ }
-  }, []);
+  }, [playNotificationSound]);
 
   // 有 bcasterDest 後啟動輪詢
   useEffect(() => {
