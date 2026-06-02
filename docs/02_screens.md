@@ -168,7 +168,7 @@ const isGroupPacket = (content?: string): boolean => {
 ### 介面元素
 
 - **訊息列表**：自己發出的訊息靠右（淡黃底色 `#fff171`），收到的靠左（灰底 `#E4E4E4`）
-- **寄件人標籤**：他人訊息上方顯示 `from_hash` 前 8 字元
+- **寄件人標籤**：所有訊息上方顯示 `from_hash` 前 8 字元（見下方說明）
 - **時間戳**：每則訊息底部顯示 `HH:MM`
 - **輸入列**：文字輸入框 + 送出按鈕
 - **空狀態提示**：首次使用前顯示「送出第一則訊息以加入廣播頻道」
@@ -195,6 +195,24 @@ const isGroupPacket = (content?: string): boolean => {
 | 其餘（`'received'` 等） | 收到的訊息（左側） |
 
 > 廣播歷史在後端重啟後不會自動恢復記憶體（僅儲存至磁碟，不在啟動時載回），前端重啟後須等新訊息進來才能重建顯示。
+
+### 寄件人 Hash 的限制
+
+歷史記錄中的 `from_hash` 存放的是 **PLAIN 廣播目的地的 hash**，而非個別發送者的身份 hash：
+
+```python
+# broadcaster.py — 送出時
+from_hash = mydest  # = RNS.prettyhexrep(bcast_dest)，頻道本身的 hash
+
+# broadcaster.py — 收到時
+from_hash = sender_hex  # = 封包中的 sender_dest，同樣是發送方的頻道 hash
+```
+
+由於 `bcast_dest` 由 `APP_NAME + "broadcast" + channel` 推導而來，**同一頻道內所有節點的廣播目的地 hash 完全相同**，顯示出來的 8 碼對所有訊息都一樣，無法辨識個別發送者。
+
+線上封包（wire）確實攜帶 `sender_name`（前端填入 `localDestHash.slice(0, 8)`），但後端在存入歷史記錄時沒有保留該欄位，導致前端取不到真正的發送者身份。
+
+**如需辨識個別發送者**，需後端在 `make_message` 時將 `sender_name`（或 sender 的 identity hash）額外存入歷史記錄。
 
 ---
 
