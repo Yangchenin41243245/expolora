@@ -147,9 +147,7 @@ export default function BroadcastChat() {
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <View style={[styles.bubble, item.isSelf ? styles.bubbleSelf : styles.bubbleOther]}>
-                {!item.isSelf && (
-                  <Text style={styles.fromHash}>{shortHash(item.from_hash)}</Text>
-                )}
+                <Text style={styles.fromHash}>{shortHash(item.from_hash)}</Text>
                 <Text style={[styles.msgText, item.isSelf ? styles.msgTextSelf : styles.msgTextOther]}>
                   {item.content}
                 </Text>

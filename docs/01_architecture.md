@@ -16,21 +16,33 @@
 
 ## 路由架構
 
-Expo Router 採用**檔案即路由**的設計，整個應用的路由結構如下：
+Expo Router 採用**檔案即路由**的設計，完整專案結構如下：
 
 ```
-app/
-├── _layout.tsx              ← 根層 Layout（初始化離線地圖）
-├── modal.tsx                ← 通用模態頁面（保留位）
-└── (tabs)/                  ← 標籤頁群組
-    ├── _layout.tsx          ← 標籤欄定義 + MessagingProvider 注入
-    ├── index.tsx            ← 重導向至 /contacts（href: null，不顯示 tab）
-    ├── contacts.tsx         ← Tab 1：聯絡人與群組管理（CONTACTS）
-    ├── chat.tsx             ← Tab 2：聊天對話（CHAT）
-    ├── broadcast_chat.tsx   ← Tab 3：廣播頻道（BROADCAST）
-    ├── j_settings.tsx       ← Tab 4：設定與診斷（SETTINGS）
-    ├── groups.tsx           ← 已刪除（href: null，功能整合至 contacts.tsx）
-    └── identity.tsx         ← 隱藏頁（href: null）
+expolora/
+├── app/
+│   ├── _layout.tsx                    ← 根堆疊 Layout（初始化離線地圖）
+│   ├── context/
+│   │   └── MessagingContext.tsx       ← 全域狀態倉庫（Lobby / Groups / Identity）
+│   └── (tabs)/
+│       ├── _layout.tsx                ← 標籤欄定義 + MessagingProvider 注入
+│       ├── contacts.tsx               ← Tab 1：CONTACTS（聯絡人、群組管理、Lobby）
+│       ├── chat.tsx                   ← Tab 2：CHAT（P2P 與群組聊天）
+│       ├── broadcast_chat.tsx         ← Tab 3：BROADCAST（RNS 廣播收發）
+│       └── j_settings.tsx             ← Tab 4：SETTINGS（連線設定、診斷、本機 Hash）
+│
+├── components/
+│   ├── GroupModals.tsx                ← CreateGroup / JoinGroup / GroupDetail / AddMembers
+│   └── LocationMessageBubble.tsx      ← 地圖氣泡（Mapbox mini-map）
+│
+├── types/chat.ts                      ← LocationMessage / OfflineStatus / DeliveryStatus
+├── utils/location.ts                  ← GPS 取得 + 離線磁磚下載
+├── utils/systemTime.ts                ← 後端時鐘校正
+├── constants/mapbox.ts                ← Mapbox Token、離線範圍設定
+│
+├── app.json                           ← Expo 設定（版本、bundle ID、Android 權限）
+├── eas.json                           ← EAS Build profiles（preview / production APK）
+└── .env.example                       ← 環境變數範本（EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN）
 ```
 
 ### 根層 `_layout.tsx`
