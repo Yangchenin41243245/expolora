@@ -33,7 +33,12 @@ type DisplayMsg = {
   isSelf: boolean;
 };
 
-const shortHash  = (h?: string) => (h ? h.slice(0, 8) : '????????');
+const shortHash = (h?: string): string => {
+  if (!h) return '????????';
+  // RNS pretty format: <AppName.aspect:hexhash> → extract hex after colon
+  const match = h.match(/:([0-9a-f]{8,})/i);
+  return match ? match[1].slice(0, 8) : h.slice(0, 8);
+};
 const formatTime = (ts: number) => {
   const d = new Date(ts * 1000);
   const hh = String(d.getHours()).padStart(2, '0');
