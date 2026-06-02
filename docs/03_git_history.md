@@ -2,8 +2,33 @@
 
 分支說明：
 - `main`：穩定版本
-- `dev_0512`：2026-05-12 開始的主要開發分支（當前分支）
+- `fixgroup_0523`：2026-05-23 開始，群組 UUID 重構與功能整合分支（當前分支）
+- `dev_0512`：2026-05-12 開始的主要開發分支（已合併至 main）
 - `fortest_donotmerge`：實驗性功能測試分支（已合併至 main）
+
+---
+
+## 2026-05-24　fixgroup_0523 分支
+
+| Hash | 說明 |
+|------|------|
+| `f52b4fe` | fix: 移除診斷端點中的多餘訊息路徑（廢棄的 /messages），簡化 API 結構 |
+| `5f26873` | feat: 群組聊天顯示發送者名稱，修正 isSelf 判斷（以 from_hash 為主） |
+| `5462584` | refactor: 聊天畫面從 index.tsx 獨立至 chat.tsx，index.tsx 改為重導向至 contacts |
+| `474d839` | fix: 更新群組成員管理功能，改用房間物件處理群組名稱及 ID，優化 API 請求 |
+| `5dfa5c4` | fix: 更新群組相關功能以直接處理包含 group_id 的房間物件，改善群組狀態管理 |
+| `6685f17` | fix: 更新群組房間型別以包含 group_id，優化房間資料處理 |
+| `404cae6` | fix: 調整 KeyboardAvoidingView 行為以改善模態視窗顯示 |
+| `4b3c562` | fix: 調整提示文字以改善使用者體驗 |
+
+---
+
+## 2026-05-20　ui_reschedule_0520 分支合併
+
+| Hash | 說明 |
+|------|------|
+| `5b0519b` | Merge pull request #20 from Yangchenin41243245/ui_reschedule_0520 |
+| `d534318` | feat: 新增刪除聯絡人功能，優化群組與聊天介面 |
 
 ---
 
@@ -156,3 +181,5 @@
 | 2026-05-11 | 自身節點過濾，nickname 欄位統一 |
 | 2026-05-12 | dev_0512：群組功能完整化，位置訊息解析修復，P2P 端點遷移 |
 | 2026-05-13 | `79cdd9f` refreshGroups 改用 /getGroups，解決重裝後群組消失 |
+| 2026-05-20 | 新增刪除聯絡人功能，UI 重構 |
+| 2026-05-23 | fixgroup_0523：群組狀態改用 UUID（group_id）為鍵，聊天畫面遷移至 chat.tsx，群組功能整合至 contacts.tsx |

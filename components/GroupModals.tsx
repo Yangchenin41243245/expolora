@@ -43,52 +43,53 @@ const C = {
 
 const shortHash = (h: string) => (h ? `${h.slice(0, 8)}…` : '—');
 
+// Mirror backend guardrails so errors surface before the API call.
+const MAX_MEMBERS_PER_OP  = 5;
+const MAX_GROUP_NAME_BYTES = 64;
+const MAX_USER_NAME_BYTES  = 32;
+
+const utf8ByteLen = (s: string): number => {
+  let bytes = 0;
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code < 0x80) bytes += 1;
+    else if (code < 0x800) bytes += 2;
+    else if (code < 0xD800 || code >= 0xE000) bytes += 3;
+    else { i++; bytes += 4; }
+  }
+  return bytes;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Modal：建立群組
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type CreateGroupModalProps = {
-  lobbyPeers: ReturnType<typeof useMessaging>['lobbyPeers'];
   onClose: () => void;
-  onCreate: (
-    group_name: string,
-    self_name: string,
-    members: GroupMember[],
-    invite_message: string,
-  ) => Promise<void>;
+  onCreate: (group_name: string, self_name: string) => Promise<void>;
 };
 
 export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
-  lobbyPeers: lobbyPeersProp, onClose, onCreate,
+  onClose, onCreate,
 }) => {
-  const lobbyPeers = lobbyPeersProp ?? [];
-  const [groupName, setGroupName]           = useState('');
-  const [selfName, setSelfName]             = useState('');
-  const [inviteMsg, setInviteMsg]           = useState('');
-  const [selectedHashes, setSelectedHashes] = useState<Set<string>>(new Set());
-  const [displayNames, setDisplayNames]     = useState<Record<string, string>>({});
-  const [loading, setLoading]               = useState(false);
-  const [errorMsg, setErrorMsg]             = useState('');
-
-  const togglePeer = (dest_hash: string) => {
-    setSelectedHashes(prev => {
-      const next = new Set(prev);
-      next.has(dest_hash) ? next.delete(dest_hash) : next.add(dest_hash);
-      return next;
-    });
-  };
+  const [groupName, setGroupName] = useState('');
+  const [selfName, setSelfName]   = useState('');
+  const [loading, setLoading]     = useState(false);
+  const [errorMsg, setErrorMsg]   = useState('');
 
   const handleCreate = async () => {
     setErrorMsg('');
     if (!groupName.trim()) { setErrorMsg('群組名稱不能空白'); return; }
-    if (!selfName.trim())  { setErrorMsg('請輸入你在群組中的顯示名稱'); return; }
-    const members: GroupMember[] = [...selectedHashes].map(h => ({
-      dest_hash: h,
-      display_name: displayNames[h]?.trim() || undefined,
-    }));
+    if (utf8ByteLen(groupName.trim()) > MAX_GROUP_NAME_BYTES) {
+      setErrorMsg(`群組名稱不能超過 ${MAX_GROUP_NAME_BYTES} bytes`); return;
+    }
+    if (!selfName.trim()) { setErrorMsg('請輸入你在群組中的顯示名稱'); return; }
+    if (utf8ByteLen(selfName.trim()) > MAX_USER_NAME_BYTES) {
+      setErrorMsg(`顯示名稱不能超過 ${MAX_USER_NAME_BYTES} bytes`); return;
+    }
     setLoading(true);
     try {
-      await onCreate(groupName.trim(), selfName.trim(), members, inviteMsg.trim());
+      await onCreate(groupName.trim(), selfName.trim());
     } catch (e: any) {
       setErrorMsg(e?.message ?? '建立失敗');
     } finally {
@@ -100,7 +101,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.modalOverlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.modalSheet}>
 
@@ -141,65 +142,6 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               />
             </View>
 
-            <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>邀請訊息（選填）</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={inviteMsg}
-                onChangeText={setInviteMsg}
-                placeholder="附在邀請封包中的訊息"
-                placeholderTextColor={C.textMute}
-              />
-            </View>
-
-            <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>
-                邀請 Lobby 節點（選填） · 已選 {selectedHashes.size} 人
-              </Text>
-              {lobbyPeers.length === 0 ? (
-                <View style={styles.emptyPeerBox}>
-                  <Text style={styles.emptyPeerText}>Lobby 中目前無可邀請的節點</Text>
-                </View>
-              ) : (
-                lobbyPeers.map(peer => {
-                  const selected = selectedHashes.has(peer.dest_hash);
-                  const name = peer.nickname || peer.announced_name || shortHash(peer.dest_hash);
-                  return (
-                    <View key={peer.dest_hash}>
-                      <TouchableOpacity
-                        style={[styles.peerPickRow, selected && styles.peerPickRowSelected]}
-                        onPress={() => togglePeer(peer.dest_hash)}
-                        activeOpacity={0.75}
-                      >
-                        <View style={[styles.peerPickCheck, selected && styles.peerPickCheckActive]}>
-                          {selected && <Text style={styles.checkMark}>✓</Text>}
-                        </View>
-                        <View style={styles.peerPickAvatar}>
-                          <Text style={styles.peerPickAvatarText}>{name[0].toUpperCase()}</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.peerPickName}>{name}</Text>
-                          <Text style={styles.peerPickHash}>{shortHash(peer.dest_hash)}</Text>
-                        </View>
-                        <View style={[styles.onlineDot, peer.online ? styles.dotOn : styles.dotOff]} />
-                      </TouchableOpacity>
-                      {selected && (
-                        <View style={styles.displayNameRow}>
-                          <TextInput
-                            style={styles.displayNameInput}
-                            value={displayNames[peer.dest_hash] ?? ''}
-                            onChangeText={v => setDisplayNames(prev => ({ ...prev, [peer.dest_hash]: v }))}
-                            placeholder={`${name} 的群組顯示名稱（選填）`}
-                            placeholderTextColor={C.textMute}
-                          />
-                        </View>
-                      )}
-                    </View>
-                  );
-                })
-              )}
-            </View>
-
             <TouchableOpacity
               style={[styles.primaryBtn, loading && styles.btnLoading]}
               onPress={handleCreate}
@@ -207,7 +149,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
             >
               {loading
                 ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={styles.primaryBtnText}>◈ 建立群組並發送邀請</Text>
+                : <Text style={styles.primaryBtnText}>◈ 建立群組</Text>
               }
             </TouchableOpacity>
 
@@ -247,7 +189,7 @@ export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({ onClose, onJoin 
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.modalOverlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={[styles.modalSheet, styles.modalSheetSmall]}>
 
@@ -264,8 +206,7 @@ export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({ onClose, onJoin 
           <View style={styles.modalBody}>
             <View style={styles.infoBox}>
               <Text style={styles.infoBoxText}>
-                輸入已知的群組名稱與你的顯示名稱。{'\n'}
-                後端將設定本地 join_confirm = true。
+                輸入已知的群組名稱與你的顯示名稱以加入群組。
               </Text>
             </View>
 
@@ -316,20 +257,18 @@ export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({ onClose, onJoin 
 
 export type GroupDetailModalProps = {
   room: GroupRoom;
+  localDestHash?: string | null;
   onClose: () => void;
-  onJoin: (self_name: string) => Promise<void>;
   onRename: (self_name: string) => Promise<void>;
   onAddMembers: () => void;
   onUnregister: () => Promise<void>;
 };
 
 export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
-  room, onClose, onJoin, onRename, onAddMembers, onUnregister,
+  room, localDestHash, onClose, onRename, onAddMembers, onUnregister,
 }) => {
   const [newSelfName, setNewSelfName] = useState(room.self_name ?? '');
   const [saving, setSaving]           = useState<string | null>(null);
-  const [showJoin, setShowJoin]       = useState(false);
-  const [joinName, setJoinName]       = useState(room.self_name ?? '');
 
   const doRename = async () => {
     if (!newSelfName.trim()) { Alert.alert('請填寫', '顯示名稱不能空白'); return; }
@@ -339,33 +278,26 @@ export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
     finally { setSaving(null); }
   };
 
-  const doJoin = async () => {
-    if (!joinName.trim()) { Alert.alert('請填寫', '請輸入顯示名稱'); return; }
-    setSaving('join');
-    try { await onJoin(joinName.trim()); }
-    catch (e: any) { Alert.alert('加入失敗', e.message); }
-    finally { setSaving(null); }
-  };
-
-  const memberCount = room.members?.length ?? 0;
+  const allMembers   = room.members ?? [];
+  const localPrefix  = localDestHash?.slice(0, 8) ?? '';
+  const otherMembers = localPrefix
+    ? allMembers.filter(m => m.dest_hash.slice(0, 8) !== localPrefix)
+    : allMembers;
+  const memberCount  = allMembers.length;
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
+      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.modalSheet}>
 
           <View style={styles.modalHeader}>
-            <View style={[
-              styles.groupIcon,
-              room.join_confirm ? styles.groupIconJoined : styles.groupIconPending,
-              { width: 44, height: 44, borderRadius: 12 },
-            ]}>
+            <View style={[styles.groupIcon, { width: 44, height: 44, borderRadius: 12 }]}>
               <Text style={styles.groupIconText}>{room.group_name[0]?.toUpperCase() ?? '#'}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.modalTitle}>{room.group_name}</Text>
               <Text style={styles.modalSub}>
-                {room.join_confirm ? '✓ 已加入' : '◌ 尚未加入'}{memberCount > 0 ? `  ·  ${memberCount} 位成員` : ''}
+                {memberCount > 0 ? `${memberCount} 位成員` : '尚無成員'}
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -375,36 +307,6 @@ export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
 
           <ScrollView style={styles.modalBody}>
 
-            {!room.join_confirm && (
-              <View style={styles.joinBanner}>
-                <Text style={styles.joinBannerText}>◌ 尚未確認加入此群組</Text>
-                {!showJoin ? (
-                  <TouchableOpacity onPress={() => setShowJoin(true)}>
-                    <Text style={styles.joinBannerBtn}>立即加入 →</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={{ marginTop: 10, gap: 8 }}>
-                    <TextInput
-                      style={styles.fieldInput}
-                      value={joinName}
-                      onChangeText={setJoinName}
-                      placeholder="輸入你的顯示名稱"
-                      placeholderTextColor={C.textMute}
-                    />
-                    <TouchableOpacity
-                      style={[styles.primaryBtn, saving === 'join' && styles.btnLoading]}
-                      onPress={doJoin}
-                      disabled={saving !== null}
-                    >
-                      {saving === 'join'
-                        ? <ActivityIndicator size="small" color="#fff" />
-                        : <Text style={styles.primaryBtnText}>確認加入</Text>
-                      }
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            )}
 
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>你的顯示名稱</Text>
@@ -433,7 +335,7 @@ export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
               <View style={styles.fieldBlock}>
                 <Text style={styles.fieldLabel}>成員列表</Text>
                 <View style={styles.memberListBox}>
-                  {room.members!.map((m, i) => (
+                  {otherMembers.map((m, i) => (
                     <View key={m.dest_hash} style={[styles.memberRow, i > 0 && styles.memberRowBorder]}>
                       <View style={styles.memberAvatar}>
                         <Text style={styles.memberAvatarText}>
@@ -457,15 +359,15 @@ export const GroupDetailModal: React.FC<GroupDetailModalProps> = ({
             <View style={styles.dangerZone}>
               <Text style={styles.dangerLabel}>本地操作</Text>
               <TouchableOpacity style={styles.dangerBtn} onPress={onUnregister}>
-                <Text style={styles.dangerBtnText}>⊗ 從本地清單移除此群組</Text>
+                <Text style={styles.dangerBtnText}>⊗ 離開此群組</Text>
               </TouchableOpacity>
-              <Text style={styles.dangerHint}>僅移除本地記錄，不通知其他成員</Text>
+              <Text style={styles.dangerHint}>將通知其他成員並清除本地聊天記錄</Text>
             </View>
 
             <View style={{ height: 20 }} />
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -496,13 +398,20 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
   const togglePeer = (dest_hash: string) => {
     setSelectedHashes(prev => {
       const next = new Set(prev);
-      next.has(dest_hash) ? next.delete(dest_hash) : next.add(dest_hash);
+      if (next.has(dest_hash)) {
+        next.delete(dest_hash);
+      } else if (next.size < MAX_MEMBERS_PER_OP) {
+        next.add(dest_hash);
+      }
       return next;
     });
   };
 
   const handleAdd = async () => {
     if (selectedHashes.size === 0) { Alert.alert('請選擇', '至少選擇一位成員'); return; }
+    if (selectedHashes.size > MAX_MEMBERS_PER_OP) {
+      Alert.alert('人數超限', `每次最多新增 ${MAX_MEMBERS_PER_OP} 位成員`); return;
+    }
     const members: GroupMember[] = [...selectedHashes].map(h => ({
       dest_hash: h,
       display_name: displayNames[h]?.trim() || undefined,
@@ -516,7 +425,7 @@ export const AddMembersModal: React.FC<AddMembersModalProps> = ({
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.modalOverlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.modalSheet}>
           <View style={styles.modalHeader}>
@@ -650,8 +559,6 @@ const styles = StyleSheet.create({
     width: 46, height: 46, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center', marginRight: 12,
   },
-  groupIconJoined:  { backgroundColor: '#E8F5E9' },
-  groupIconPending: { backgroundColor: '#FFF8E1' },
   groupIconText:    { color: C.text, fontSize: 20, fontWeight: '700', fontFamily: 'monospace' },
 
   // ── 表單 ──
@@ -712,14 +619,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', borderWidth: 1, borderColor: C.border,
   },
   emptyPeerText: { color: C.textDim, fontSize: 12, fontFamily: 'monospace' },
-
-  // ── 加入 Banner ──
-  joinBanner: {
-    backgroundColor: '#FFF8E1', borderRadius: 10, padding: 14,
-    borderWidth: 1, borderColor: '#F0D78A', marginBottom: 16,
-  },
-  joinBannerText: { color: C.yellow, fontSize: 13, fontFamily: 'monospace' },
-  joinBannerBtn:  { color: C.accent, fontSize: 13, marginTop: 8, fontWeight: '700' },
 
   // ── 成員列表 ──
   memberListBox: {

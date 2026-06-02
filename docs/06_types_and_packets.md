@@ -20,6 +20,7 @@ interface LocationPayload {
 interface LocationMessage extends IMessage {
   location?:      LocationPayload;
   offlineStatus?: OfflineStatus;
+  deliveryStatus?: DeliveryStatus;
 }
 ```
 
@@ -44,6 +45,7 @@ type GroupMember = {
 // 群組房間狀態
 type GroupRoom = {
   group_name:    string;
+  group_id?:     string;       // 後端分配的 UUID，建立/加入後填入
   self_name?:    string;       // 自己在該群組的顯示名稱
   join_confirm?: boolean;      // true = 已確認加入
   members?:      GroupMember[];
@@ -63,17 +65,25 @@ type GroupMessage = {
 };
 ```
 
-### `app/(tabs)/index.tsx`（本地型別）
+**Context 方法簽名：**
+
+```typescript
+registerGroup:   (room: GroupRoom) => Promise<void>;
+unregisterGroup: (group_id: string) => Promise<void>;
+refreshGroups:   () => Promise<void>;
+```
+
+### `app/(tabs)/chat.tsx`（本地型別）
 
 ```typescript
 // 原始 P2P 訊息（來自後端 /getChat 或 /getDirectChat）
 type RawPeerMsg = {
-  msg_id?:    string;
-  from_hash?: string;
-  to_hash?:   string;
-  content?:   string;
-  status?:    string;    // 'delivered' = 自己發的, 'received' = 別人發的
-  timestamp?: number;    // Unix 秒
+  message_id?: string;
+  from_hash?:  string;
+  to_hash?:    string;
+  content?:    string;
+  status?:     string;    // 'delivered' = 自己發的, 'received' = 別人發的
+  timestamp?:  number;    // Unix 秒
 };
 
 // 原始群組訊息（來自後端 /getGroupChat）
@@ -85,6 +95,28 @@ type RawGroupMsg = {
   message_id?:  string;
   status?:      string;
   timestamp?:   number;
+};
+```
+
+### `app/(tabs)/broadcast_chat.tsx`（本地型別）
+
+```typescript
+// 來自後端 /broadcaster/history/{dest_hash} 的原始訊息
+type RawMsg = {
+  message_id?: string;
+  timestamp?:  number;   // Unix 秒
+  from_hash?:  string;   // 廣播 PLAIN 目的地 hash（非發送者身份 hash）
+  content?:    string;
+  status?:     string;   // 'send_pending' = 自己發的
+};
+
+// 渲染用訊息
+type DisplayMsg = {
+  id:        string;
+  timestamp: number;
+  from_hash: string;
+  content:   string;
+  isSelf:    boolean;   // status === 'send_pending'
 };
 ```
 
@@ -117,9 +149,10 @@ type RawGroupMsg = {
   "data": {
     "groups": [
       {
-        "group_name":   "my_group",
-        "self_name":    "Bob",
-        "join_confirm": true,
+        "group_id":      "550e8400-e29b-41d4-a716-446655440000",
+        "group_name":    "my_group",
+        "self_name":     "Bob",
+        "join_confirm":  true,
         "invite_message": "",
         "members": [
           { "dest_hash": "a1b2c3d4...", "display_name": "Alice" }
@@ -140,27 +173,30 @@ type RawGroupMsg = {
   "data": {
     "messages": [
       {
-        "msg_id": "550e8400-e29b-41d4-a716-446655440000",
-        "from_hash": "a1b2c3d4...",
-        "to_hash":   "e5f6a7b8...",
-        "content":   "Hello!",
-        "status":    "received",
-        "timestamp": 1715000000
+        "message_id": "550e8400-e29b-41d4-a716-446655440000",
+        "from_hash":  "a1b2c3d4...",
+        "to_hash":    "e5f6a7b8...",
+        "content":    "Hello!",
+        "status":     "received",
+        "timestamp":  1715000000
       }
     ]
   }
 }
 ```
 
-### `GET /getGroupChat/{group_name}`
+### `GET /getGroupChat/{group_id}`
+
+路徑參數使用 **UUID（group_id）**，傳入 display name 會回傳 404。
 
 ```json
 {
   "data": {
     "group_room": {
-      "group_name":   "my_group",
-      "self_name":    "Bob",
-      "join_confirm": true,
+      "group_id":      "550e8400-e29b-41d4-a716-446655440000",
+      "group_name":    "my_group",
+      "self_name":     "Bob",
+      "join_confirm":  true,
       "members": [
         { "dest_hash": "a1b2c3d4...", "display_name": "Alice" }
       ]
@@ -181,6 +217,24 @@ type RawGroupMsg = {
 }
 ```
 
+### `POST /newGroup` 與 `POST /joinGroup` 回應
+
+建立或加入群組後，回應中包含完整的 `group_room`（含 `group_id`），前端立即以此寫入本地狀態：
+
+```json
+{
+  "data": {
+    "group_room": {
+      "group_id":   "550e8400-e29b-41d4-a716-446655440000",
+      "group_name": "my_group",
+      "self_name":  "Bob",
+      "join_confirm": true,
+      "members": []
+    }
+  }
+}
+```
+
 ### `GET /identity`
 
 ```json
@@ -191,26 +245,71 @@ type RawGroupMsg = {
 }
 ```
 
+### `POST /broadcaster/send`
+
+發送廣播訊息。首次呼叫可從回應中取得廣播 PLAIN 目的地 hash。
+
+請求 Body：
+```json
+{ "sender_name": "a1b2c3d4", "message": "Hello world" }
+```
+
+回應：
+```json
+{
+  "data": {
+    "dest_hash":  "f7e8d9c0b1a2f3e4d5c6b7a8f9e0d1c2",
+    "message_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status":     "queued"
+  }
+}
+```
+
+### `GET /broadcaster/history/{dest_hash}`
+
+取得廣播頻道歷史訊息。`dest_hash` 為廣播 PLAIN 目的地 hash（非個人身份 hash）。
+
+```json
+{
+  "data": {
+    "messages": [
+      {
+        "message_id": "550e8400-e29b-41d4-a716-446655440000",
+        "timestamp":  1715000000,
+        "from_hash":  "f7e8d9c0b1a2f3e4d5c6b7a8f9e0d1c2",
+        "content":    "Hello world",
+        "status":     "send_pending"
+      }
+    ]
+  }
+}
+```
+
+> `from_hash` 為廣播 PLAIN 目的地 hash，所有訊息的 `from_hash` 相同（非各別發送者身份）。`status === 'send_pending'` 標識自己發出的訊息，其餘為收到的訊息。
+
 ---
 
 ## 群組封包格式（P2P 通道中的群組控制訊息）
 
-RNS 群組邀請與群組訊息以 JSON 字串形式透過點對點連線傳送，後端將其儲存在目標節點的直接訊息記錄（`rns_app_chats/{dest_hash}.json`）中。前端必須偵測並過濾這些封包，避免在 P2P 聊天介面顯示。
+RNS 群組控制訊息以 JSON 字串形式透過點對點連線傳送，後端將其儲存在目標節點的直接訊息記錄（`rns_app_chats/{dest_hash}.json`）中。前端必須偵測並過濾這些封包，避免在 P2P 聊天介面顯示。
 
 ### 辨識與過濾流程
 
 ```typescript
-// 定義於 app/(tabs)/index.tsx（模組層級，非 React hook）
+// 定義於 app/(tabs)/chat.tsx（模組層級，非 React hook）
 const isGroupPacket = (content?: string): boolean => {
   if (!content) return false;
   try {
     const p = JSON.parse(content);
-    return typeof p === 'object' && p !== null && p.category === 'group';
+    if (typeof p !== 'object' || p === null) return false;
+    // packet_type = 舊版欄位；pkt_type = 新版緊湊欄位
+    const pt: string = p.packet_type ?? p.pkt_type;
+    return pt === 'group' || pt === 'group_system' || pt === 'broadcast';
   } catch { return false; }
 };
 ```
 
-**過濾發生的位置**：僅在 `pollPeer`（P2P 訊息輪詢，`index.tsx:213–214`）套用：
+**過濾發生的位置**：僅在 `pollPeer`（P2P 訊息輪詢）套用：
 
 ```typescript
 const converted = rawMsgs
@@ -222,47 +321,51 @@ const converted = rawMsgs
 **過濾邏輯**：
 - `content` 為空或非字串 → `false`（保留訊息）
 - `JSON.parse` 失敗（純文字訊息）→ `false`（保留訊息）
-- 解析後物件存在 `category === "group"` → `true`（過濾掉）
+- 解析後物件的 `packet_type`（或緊湊鍵 `pkt_type`）為 `"group"` / `"group_system"` / `"broadcast"` → `true`（過濾掉）
 
-**不過濾的場合**：
-- `pollGroup`（群組訊息輪詢）不套用此過濾，因為 `/getGroupChat` 回傳的訊息已是群組訊息格式，不會混入群組控制封包。
-- `sendLocation` / `onSend` 發送路徑不涉及此函式。
+> **緊湊鍵說明**：新版廣播封包（`broadcaster.py`）使用 `pkt_type` 而非 `packet_type`，後端 `on_packet` 兩者都接受（`contents.get("pkt_type") or contents.get("packet_type")`）。前端過濾邏輯亦應同時檢查兩個鍵。
+
+### 群組封包通用格式
+
+新版封包使用 `packet_type` 欄位（舊版為 `category`）：
+
+```json
+{
+  "packet_type": "group",
+  "action":      "invite | message | joined | leave",
+  "group_id":    "550e8400-e29b-41d4-a716-446655440000",
+  "group_name":  "my_group",
+  "from_name":   "Alice",
+  ...
+}
+```
 
 ### 邀請封包（`action: "invite"`）
 
 ```json
 {
-  "category":       "group",
+  "packet_type":    "group",
   "action":         "invite",
+  "group_id":       "550e8400-e29b-41d4-a716-446655440000",
   "group_name":     "my_group",
   "from_name":      "Alice",
-  "invite_message": "歡迎加入！",
+  "invite_message": "歡迎加入！"
+}
+```
+
+> GROUP 封包不攜帶完整成員清單（RNS MTU 約 500 bytes），成員清單僅在 GROUP_SYSTEM 封包中傳送。
+
+### 系統通知（`packet_type: "group_system"`）
+
+```json
+{
+  "packet_type": "group_system",
+  "group_id":    "550e8400-e29b-41d4-a716-446655440000",
+  "group_name":  "my_group",
+  "content":     "Alice 已加入群組",
   "members": [
     { "dest_hash": "a1b2c3d4...", "display_name": "Alice" }
   ]
-}
-```
-
-### 群組文字訊息（`action: "message"`）
-
-```json
-{
-  "category":   "group",
-  "action":     "message",
-  "group_name": "my_group",
-  "from_name":  "Alice",
-  "content":    "大家好"
-}
-```
-
-### 確認加入（`action: "joined"`）
-
-```json
-{
-  "category":   "group",
-  "action":     "joined",
-  "group_name": "my_group",
-  "from_name":  "Bob"
 }
 ```
 

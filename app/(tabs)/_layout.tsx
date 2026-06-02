@@ -20,6 +20,10 @@ export default function TabLayout() {
         }}
       >
         <Tabs.Screen
+          name="index"
+          options={{ href: null }}
+        />
+        <Tabs.Screen
           name="contacts"
           options={{
             title: '聯絡介面',
@@ -41,12 +45,22 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="index"
+          name="chat"
           options={{
             title: '通訊頁面',
             tabBarLabel: 'CHAT',
             tabBarIcon: ({ color }) => (
               <Text style={{ fontSize: 24, color }}>💬</Text>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="broadcast_chat"
+          options={{
+            title: '廣播頻道',
+            tabBarLabel: 'BROADCAST',
+            tabBarIcon: ({ color }) => (
+              <Text style={{ fontSize: 24, color }}>📡</Text>
             ),
           }}
         />

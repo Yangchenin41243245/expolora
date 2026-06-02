@@ -64,7 +64,7 @@
 
 | 模組 | 版本 | 用途 |
 |------|------|------|
-| `@react-native-async-storage/async-storage` | 2.2.0 | 本地鍵值儲存（host、port、群組清單） |
+| `@react-native-async-storage/async-storage` | 2.2.0 | 本地鍵值儲存（`saved_host`、`saved_port`、`bcaster_dest_hash`） |
 
 ---
 

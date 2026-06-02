@@ -25,7 +25,7 @@ const TEST_IS_SAVED = false;
 // ────────────────────────────────────────────────────────
 
 const ENDPOINT_GROUPS = {
-  診斷: ['/status', '/identity', '/messages', '/getSystemTime'],
+  診斷: ['/status', '/identity', '/getSystemTime'],
   聯絡人: ['/getContactList', '/getBlocklist'],
   Lobby: ['/getLobby'],
 } as const;
@@ -84,7 +84,7 @@ const formatTimeSyncStatus = ({ loading, result, error }: TimeSyncState) => {
 
 const SettingsScreen: React.FC = () => {
   // ── 從 Context 讀取共享的 host/port ──────────────────
-  const { host, port, setHost, setPort, firstPeer } = useMessaging();
+  const { host, port, setHost, setPort, firstPeer, localDestHash } = useMessaging();
 
   // 本地編輯暫存，套用前不影響 Context
   const [editingHost, setEditingHost] = useState(host);
@@ -266,6 +266,16 @@ const SettingsScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* ── 本機 Hash ── */}
+      <View style={styles.testSendRow}>
+        <View style={styles.testSendInfo}>
+          <Text style={styles.testSendLabel}>本機 Hash</Text>
+          <Text style={styles.testSendMeta} numberOfLines={1}>
+            {localDestHash ?? '尚未取得'}
+          </Text>
+        </View>
+      </View>
 
       {/* ── 頂部模式切換 ── */}
       <View style={styles.topTabRow}>

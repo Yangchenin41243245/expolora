@@ -77,6 +77,7 @@ const formatTime = (ts?: number) => {
 export default function contacts() {
   const {
     baseUrl,
+    localDestHash,
     groupRooms, groupsLoading,
     refreshGroups, registerGroup, unregisterGroup,
   } = useMessaging();
@@ -137,7 +138,7 @@ export default function contacts() {
     try {
       const json = await apiFetch('/getLobby');
       const peers: LobbyPeer[] = json?.data?.lobby ?? [];
-      setLobbyPeers(peers.filter(p => p.announced_name !== 'Unknown'));
+      setLobbyPeers(peers.filter(p => p.announced_name !== 'Unknown' && p.online !== false));
     } catch { setLobbyPeers([]); }
   }, [apiFetch]);
 
@@ -185,6 +186,11 @@ export default function contacts() {
     await refreshAll();
   };
 
+  const deleteContact = async (dest_hash: string) => {
+    await apiPost('/deleteContact', { dest_hash });
+    await refreshAll();
+  };
+
   const hideLink = async (dest_hash: string, reason: string) => {
     await apiPost('/hideLink', { dest_hash, reason: reason.trim() || 'ignore' });
     await refreshAll();
@@ -213,28 +219,34 @@ export default function contacts() {
     } catch { return null; }
   }, [baseUrl]);
 
-  const createGroup = useCallback(async (
-    group_name: string, self_name: string,
-    members: GroupMember[], invite_message: string,
-  ) => {
-    await apiPost('/newGroup', { group_name, self_name, members, invite_message: invite_message || undefined });
-    await registerGroup(group_name);
+  const createGroup = useCallback(async (group_name: string, self_name: string) => {
+    const json = await apiPost('/newGroup', { group_name, self_name, members: [] });
+    const room: GroupRoom | undefined = json?.data?.group_room;
+    if (room) await registerGroup(room);
   }, [apiPost, registerGroup]);
 
   const joinGroup = useCallback(async (group_name: string, self_name: string) => {
-    await apiPost('/joinGroup', { group_name, self_name });
-    await refreshGroups();
-  }, [apiPost, refreshGroups]);
+    const json = await apiPost('/joinGroup', { group_name, self_name });
+    const room: GroupRoom | undefined = json?.data?.group_room;
+    if (room) await registerGroup(room);
+  }, [apiPost, registerGroup]);
 
   const addMembers = useCallback(async (
-    group_name: string, members: GroupMember[], invite_message: string,
+    room: GroupRoom, members: GroupMember[], invite_message: string,
   ) => {
-    await apiPost('/addGroupMembers', { group_name, members, invite_message: invite_message || undefined });
+    for (const member of members) {
+      await apiPost('/addGroupMembers', {
+        group_id: room.group_id,
+        group_name: room.group_name,
+        members: [member],
+        invite_message: invite_message || undefined,
+      });
+    }
     await refreshGroups();
   }, [apiPost, refreshGroups]);
 
-  const setSelfDisplayName = useCallback(async (group_name: string, self_name: string) => {
-    await apiPost('/setSelfDisplayName', { group_name, self_name });
+  const setSelfDisplayName = useCallback(async (room: GroupRoom, self_name: string) => {
+    await apiPost('/setSelfDisplayName', { group_id: room.group_id, group_name: room.group_name, self_name });
     await refreshGroups();
   }, [apiPost, refreshGroups]);
 
@@ -254,17 +266,17 @@ export default function contacts() {
   const onlineGlyph = (online?: boolean) =>
     online ? <View style={styles.dotOnline} /> : <View style={styles.dotOffline} />;
 
-  const navigateToPeer = (dest_hash: string) =>
-    router.navigate({ pathname: '/(tabs)', params: { dest_hash } });
+  const navigateToPeer = (dest_hash: string, displayName?: string) =>
+    router.navigate({ pathname: '/(tabs)/chat' as never, params: { dest_hash, ...(displayName ? { peer_name: displayName } : {}) } });
   const navigateToGroup = (group_name: string) =>
-    router.navigate({ pathname: '/(tabs)', params: { group_name } });
+    router.navigate({ pathname: '/(tabs)/chat' as never, params: { group_name } });
 
   // ── 聯絡人列表項目 ──────────────────────────────────────────────────────────
 
   const ContactRow = ({ item }: { item: Contact }) => {
     const isOnline = item.online ?? lobbyPeers.find(p => p.dest_hash === item.dest_hash)?.online;
     return (
-    <TouchableOpacity style={styles.row} onPress={() => navigateToPeer(item.dest_hash)} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.row} onPress={() => navigateToPeer(item.dest_hash, displayName(item))} activeOpacity={0.7}>
       <View style={styles.rowLeft}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
@@ -281,7 +293,7 @@ export default function contacts() {
           </Text>
         </View>
       </View>
-      <TouchableOpacity style={styles.optionBtn} onPress={() => setDetailContact(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      <TouchableOpacity style={styles.optionBtn} onPress={() => setDetailContact({ ...item, online: isOnline })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <Text style={styles.optionBtnText}>⋯</Text>
       </TouchableOpacity>
     </TouchableOpacity>
@@ -291,11 +303,11 @@ export default function contacts() {
   // ── Lobby 列表項目 ──────────────────────────────────────────────────────────
 
   const LobbyRow = ({ item }: { item: LobbyPeer }) => {
-    const isSaved = item.is_saved_contact;
+    const isSaved = item.is_saved_contact || contacts.some(c => c.dest_hash === item.dest_hash);
     return (
       <TouchableOpacity
         style={[styles.row, isSaved && styles.rowSaved]}
-        onPress={() => navigateToPeer(item.dest_hash)}
+        onPress={() => navigateToPeer(item.dest_hash, item.nickname || item.announced_name)}
         activeOpacity={0.7}
       >
         <View style={styles.rowLeft}>
@@ -355,13 +367,6 @@ export default function contacts() {
     </View>
   );
 
-  const JoinBadge = ({ confirmed }: { confirmed?: boolean }) =>
-    confirmed ? (
-      <View style={styles.badgeJoined}><Text style={styles.badgeJoinedText}>✓ 已加入</Text></View>
-    ) : (
-      <View style={styles.badgePending}><Text style={styles.badgePendingText}>◌ 待加入</Text></View>
-    );
-
   const GroupRow = ({ item, index }: { item: GroupRoom; index: number }) => {
     const memberCount = item.members?.length ?? 0;
     const rowAnim = useRef(new Animated.Value(0)).current;
@@ -375,17 +380,29 @@ export default function contacts() {
       }}>
         <TouchableOpacity
           style={styles.groupRow}
-          onPress={() => navigateToGroup(item.group_name)}
+          onPress={() => {
+            if (!item.self_name) {
+              Alert.alert(
+                '請先設定顯示名稱',
+                '你尚未設定在此群組中的名稱，請先設定後再進入群組。',
+                [
+                  { text: '取消', style: 'cancel' },
+                  { text: '去設定', onPress: () => setScene({ type: 'detail', room: item }) },
+                ],
+              );
+            } else {
+              navigateToGroup(item.group_name);
+            }
+          }}
           activeOpacity={0.75}
         >
-          <View style={[styles.groupColorBar, item.join_confirm ? styles.colorBarJoined : styles.colorBarPending]} />
-          <View style={[styles.groupIcon, item.join_confirm ? styles.groupIconJoined : styles.groupIconPending]}>
+          <View style={styles.groupColorBar} />
+          <View style={styles.groupIcon}>
             <Text style={styles.groupIconText}>{item.group_name[0]?.toUpperCase() ?? '#'}</Text>
           </View>
           <View style={styles.groupInfo}>
             <View style={styles.groupNameRow}>
               <Text style={styles.groupName} numberOfLines={1}>{item.group_name}</Text>
-              <JoinBadge confirmed={item.join_confirm} />
             </View>
             <View style={styles.groupMeta}>
               {item.self_name ? (
@@ -569,6 +586,14 @@ export default function contacts() {
               Alert.alert('封鎖失敗', e.message);
             }
           }}
+          onDelete={async () => {
+            try {
+              await deleteContact(detailContact.dest_hash);
+              setDetailContact(null);
+            } catch (e: any) {
+              Alert.alert('刪除失敗', e.message);
+            }
+          }}
           onRefresh={async () => {
             await loadContacts();
             // 更新 modal 內的資料
@@ -625,10 +650,9 @@ export default function contacts() {
       {/* ── 群組 Modals ── */}
       {scene.type === 'create' && (
         <CreateGroupModal
-          lobbyPeers={lobbyPeers}
           onClose={() => setScene({ type: 'none' })}
-          onCreate={async (group_name, self_name, members, invite_message) => {
-            await createGroup(group_name, self_name, members, invite_message);
+          onCreate={async (group_name, self_name) => {
+            await createGroup(group_name, self_name);
             setScene({ type: 'none' });
             await handleGroupRefresh();
           }}
@@ -641,7 +665,6 @@ export default function contacts() {
           onJoin={async (group_name, self_name) => {
             try {
               await joinGroup(group_name, self_name);
-              await registerGroup(group_name);
               setScene({ type: 'none' });
               await handleGroupRefresh();
             } catch (e: any) {
@@ -654,18 +677,11 @@ export default function contacts() {
       {scene.type === 'detail' && (
         <GroupDetailModal
           room={scene.room}
+          localDestHash={localDestHash}
           onClose={() => setScene({ type: 'none' })}
-          onJoin={async (self_name) => {
-            try {
-              await joinGroup(scene.room.group_name, self_name);
-              setScene({ type: 'none' });
-            } catch (e: any) {
-              Alert.alert('加入失敗', e.message);
-            }
-          }}
           onRename={async (self_name) => {
             try {
-              await setSelfDisplayName(scene.room.group_name, self_name);
+              await setSelfDisplayName(scene.room, self_name);
               setScene({ type: 'none' });
             } catch (e: any) {
               Alert.alert('更新失敗', e.message);
@@ -673,7 +689,8 @@ export default function contacts() {
           }}
           onAddMembers={() => setScene({ type: 'add_members', room: scene.room })}
           onUnregister={async () => {
-            await unregisterGroup(scene.room.group_name);
+            if (!scene.room.group_id) return;
+            await unregisterGroup(scene.room.group_id);
             setScene({ type: 'none' });
           }}
         />
@@ -686,7 +703,7 @@ export default function contacts() {
           onClose={() => setScene({ type: 'none' })}
           onAdd={async (members, invite_message) => {
             try {
-              await addMembers(scene.room.group_name, members, invite_message);
+              await addMembers(scene.room, members, invite_message);
               setScene({ type: 'none' });
             } catch (e: any) {
               Alert.alert('新增失敗', e.message);
@@ -710,11 +727,12 @@ type ContactDetailModalProps = {
   onEditNickname: (dest_hash: string, nickname: string) => Promise<void>;
   onEditNote: (dest_hash: string, note: string) => Promise<void>;
   onBlock: (reason: string) => Promise<void>;
+  onDelete: () => Promise<void>;
   onRefresh: () => Promise<void>;
 };
 
 const ContactDetailModal: React.FC<ContactDetailModalProps> = ({
-  contact, onClose, onEditNickname, onEditNote, onBlock, onRefresh,
+  contact, onClose, onEditNickname, onEditNote, onBlock, onDelete, onRefresh,
 }) => {
   const [nicknameEdit, setNicknameEdit] = useState(contact.nickname ?? contact.announced_name ?? '');
   const [noteEdit, setNoteEdit]         = useState(contact.notes ?? '');
@@ -742,9 +760,20 @@ const ContactDetailModal: React.FC<ContactDetailModalProps> = ({
     finally { setSaving(null); }
   };
 
+  const doDelete = async () => {
+    Alert.alert('刪除聯絡人', `確定要刪除 ${contact.nickname || contact.announced_name || contact.dest_hash.slice(0, 8)} 嗎？\n聊天記錄也將一併清除。`, [
+      { text: '取消', style: 'cancel' },
+      { text: '刪除', style: 'destructive', onPress: async () => {
+        setSaving('delete');
+        try { await onDelete(); }
+        finally { setSaving(null); }
+      }},
+    ]);
+  };
+
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.modalSheet}>
 
           {/* Header */}
@@ -830,6 +859,16 @@ const ContactDetailModal: React.FC<ContactDetailModalProps> = ({
             {/* 封鎖區 */}
             <View style={styles.dangerZone}>
               <Text style={styles.dangerLabel}>危險操作</Text>
+              <TouchableOpacity
+                style={[styles.dangerBtn, { marginBottom: 8 }, saving === 'delete' && styles.fieldBtnLoading]}
+                onPress={doDelete}
+                disabled={saving !== null}
+              >
+                {saving === 'delete'
+                  ? <ActivityIndicator size="small" color="#C0392B" />
+                  : <Text style={styles.dangerBtnText}>✕ 刪除聯絡人</Text>
+                }
+              </TouchableOpacity>
               {!showBlock ? (
                 <TouchableOpacity style={styles.dangerBtn} onPress={() => setShowBlock(true)}>
                   <Text style={styles.dangerBtnText}>⊘ 封鎖此聯絡人</Text>
@@ -956,7 +995,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.modalSheet}>
           <View style={styles.modalHeader}>
             <View style={styles.avatar}>
@@ -1281,15 +1320,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14, paddingRight: 16,
     backgroundColor: C.bg, overflow: 'hidden',
   },
-  groupColorBar:    { width: 3, alignSelf: 'stretch', marginRight: 12 },
-  colorBarJoined:   { backgroundColor: C.green },
-  colorBarPending:  { backgroundColor: '#C68600' },
+  groupColorBar:    { width: 3, alignSelf: 'stretch', marginRight: 12, backgroundColor: '#0B6EFD' },
   groupIcon: {
     width: 46, height: 46, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center', marginRight: 12,
+    backgroundColor: '#EEF2FF',
   },
-  groupIconJoined:  { backgroundColor: C.greenBg },
-  groupIconPending: { backgroundColor: '#FFF8E1' },
   groupIconText:    { color: C.text, fontSize: 20, fontWeight: '700', fontFamily: 'monospace' },
   groupInfo:        { flex: 1 },
   groupNameRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
@@ -1300,11 +1336,6 @@ const styles = StyleSheet.create({
   memberCountChip:  { backgroundColor: C.surface, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, borderWidth: 1, borderColor: C.border },
   memberCountText:  { color: C.textDim, fontSize: 10 },
   groupRowChevron:  { color: C.textMute, fontSize: 20, marginLeft: 4 },
-
-  badgeJoined:     { backgroundColor: C.greenBg, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#A8DDB5' },
-  badgeJoinedText: { color: '#1A6B3C', fontSize: 10, fontFamily: 'monospace' },
-  badgePending:    { backgroundColor: '#FFF8E1', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#F0D78A' },
-  badgePendingText:{ color: '#C68600', fontSize: 10, fontFamily: 'monospace' },
 
   groupHeaderJoinBtn:    { borderWidth: 1, borderColor: C.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   groupHeaderJoinText:   { color: '#000', fontSize: 12, fontFamily: 'monospace' },
