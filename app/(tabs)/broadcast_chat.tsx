@@ -1,17 +1,17 @@
 // filepath: app/(tabs)/broadcast_chat.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useHeaderHeight } from '@react-navigation/elements';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  KeyboardAvoidingView,
-  Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-controller';
 import { useMessaging } from '../context/MessagingContext';
 
 const POLL_MS = 4000;
@@ -42,6 +42,7 @@ const formatTime = (ts: number) => {
 };
 
 export default function BroadcastChat() {
+  const headerHeight = useHeaderHeight();
   const { baseUrl, localDestHash } = useMessaging();
 
   const [bcasterDest, setBcasterDest] = useState<string | null>(null);
@@ -125,68 +126,71 @@ export default function BroadcastChat() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 30}
-    >
-      {/* 訊息列表 */}
-      {!bcasterDest ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>📡 廣播頻道</Text>
-          <Text style={styles.emptyHint}>送出第一則訊息以加入廣播頻道</Text>
-        </View>
-      ) : (
-        <FlatList
-          inverted
-          data={messages}
-          keyExtractor={m => m.id}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <View style={[styles.bubble, item.isSelf ? styles.bubbleSelf : styles.bubbleOther]}>
-              {!item.isSelf && (
-                <Text style={styles.fromHash}>{shortHash(item.from_hash)}</Text>
-              )}
-              <Text style={[styles.msgText, item.isSelf ? styles.msgTextSelf : styles.msgTextOther]}>
-                {item.content}
-              </Text>
-              <Text style={[styles.msgTime, item.isSelf ? styles.msgTimeSelf : styles.msgTimeOther]}>
-                {formatTime(item.timestamp)}
-              </Text>
-            </View>
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyHint}>尚無訊息</Text>
-            </View>
-          }
-        />
-      )}
+    <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior="translate-with-padding"
+        keyboardVerticalOffset={headerHeight}
+      >
+        {/* 訊息列表 */}
+        {!bcasterDest ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>📡 廣播頻道</Text>
+            <Text style={styles.emptyHint}>送出第一則訊息以加入廣播頻道</Text>
+          </View>
+        ) : (
+          <FlatList
+            inverted
+            data={messages}
+            keyExtractor={m => m.id}
+            contentContainerStyle={styles.listContent}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <View style={[styles.bubble, item.isSelf ? styles.bubbleSelf : styles.bubbleOther]}>
+                {!item.isSelf && (
+                  <Text style={styles.fromHash}>{shortHash(item.from_hash)}</Text>
+                )}
+                <Text style={[styles.msgText, item.isSelf ? styles.msgTextSelf : styles.msgTextOther]}>
+                  {item.content}
+                </Text>
+                <Text style={[styles.msgTime, item.isSelf ? styles.msgTimeSelf : styles.msgTimeOther]}>
+                  {formatTime(item.timestamp)}
+                </Text>
+              </View>
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyHint}>尚無訊息</Text>
+              </View>
+            }
+          />
+        )}
 
-      {/* 輸入列 */}
-      <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          value={inputText}
-          onChangeText={setInputText}
-          placeholder="輸入廣播訊息..."
-          placeholderTextColor="#999"
-          returnKeyType="send"
-          onSubmitEditing={handleSend}
-          blurOnSubmit={false}
-        />
-        <TouchableOpacity
-          style={[styles.sendBtn, (!inputText.trim() || sending) && styles.sendBtnDisabled]}
-          onPress={handleSend}
-          disabled={!inputText.trim() || sending}
-        >
-          {sending
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Text style={styles.sendBtnText}>送出</Text>
-          }
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+        {/* 輸入列 */}
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            value={inputText}
+            onChangeText={setInputText}
+            placeholder="輸入廣播訊息..."
+            placeholderTextColor="#999"
+            returnKeyType="send"
+            onSubmitEditing={handleSend}
+            blurOnSubmit={false}
+          />
+          <TouchableOpacity
+            style={[styles.sendBtn, (!inputText.trim() || sending) && styles.sendBtnDisabled]}
+            onPress={handleSend}
+            disabled={!inputText.trim() || sending}
+          >
+            {sending
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Text style={styles.sendBtnText}>送出</Text>
+            }
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </KeyboardProvider>
   );
 }
 
