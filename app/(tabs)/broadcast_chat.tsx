@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-controller';
+import { useNotificationSound } from '../../hooks/useNotificationSound';
 import { useMessaging } from '../context/MessagingContext';
 
 const POLL_MS = 4000;
@@ -33,7 +34,12 @@ type DisplayMsg = {
   isSelf: boolean;
 };
 
-const shortHash  = (h?: string) => (h ? h.slice(0, 8) : '????????');
+const shortHash = (h?: string): string => {
+  if (!h) return '????????';
+  // RNS pretty format: <AppName.aspect:hexhash> → extract hex after colon
+  const match = h.match(/:([0-9a-f]{8,})/i);
+  return match ? match[1].slice(0, 8) : h.slice(0, 8);
+};
 const formatTime = (ts: number) => {
   const d = new Date(ts * 1000);
   const hh = String(d.getHours()).padStart(2, '0');
@@ -43,6 +49,7 @@ const formatTime = (ts: number) => {
 
 export default function BroadcastChat() {
   const headerHeight = useHeaderHeight();
+  const playNotificationSound = useNotificationSound();
   const { baseUrl, localDestHash } = useMessaging();
 
   const [bcasterDest, setBcasterDest] = useState<string | null>(null);
@@ -50,8 +57,9 @@ export default function BroadcastChat() {
   const [inputText, setInputText]     = useState('');
   const [sending, setSending]         = useState(false);
 
-  const bcasterDestRef = useRef<string | null>(null);
-  const baseUrlRef     = useRef(baseUrl);
+  const bcasterDestRef  = useRef<string | null>(null);
+  const baseUrlRef      = useRef(baseUrl);
+  const prevMsgCountRef = useRef<number | null>(null);
 
   useEffect(() => { bcasterDestRef.current = bcasterDest; }, [bcasterDest]);
   useEffect(() => { baseUrlRef.current = baseUrl; },        [baseUrl]);
@@ -85,9 +93,13 @@ export default function BroadcastChat() {
           isSelf:    m.status === 'send_pending',
         }))
         .sort((a, b) => b.timestamp - a.timestamp);
+      if (prevMsgCountRef.current !== null && converted.length > prevMsgCountRef.current) {
+        void playNotificationSound();
+      }
+      prevMsgCountRef.current = converted.length;
       setMessages(converted);
     } catch { /* 靜默失敗 */ }
-  }, []);
+  }, [playNotificationSound]);
 
   // 有 bcasterDest 後啟動輪詢
   useEffect(() => {
@@ -147,9 +159,7 @@ export default function BroadcastChat() {
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <View style={[styles.bubble, item.isSelf ? styles.bubbleSelf : styles.bubbleOther]}>
-                {!item.isSelf && (
-                  <Text style={styles.fromHash}>{shortHash(item.from_hash)}</Text>
-                )}
+                <Text style={styles.fromHash}>{shortHash(item.from_hash)}</Text>
                 <Text style={[styles.msgText, item.isSelf ? styles.msgTextSelf : styles.msgTextOther]}>
                   {item.content}
                 </Text>

@@ -285,7 +285,7 @@ type DisplayMsg = {
 }
 ```
 
-> `from_hash` 為廣播 PLAIN 目的地 hash，所有訊息的 `from_hash` 相同（非各別發送者身份）。`status === 'send_pending'` 標識自己發出的訊息，其餘為收到的訊息。
+> **`from_hash` 為廣播 PLAIN 目的地 hash，同一頻道內所有訊息的 `from_hash` 完全相同**，無法用於辨識個別發送者。這是架構上的已知限制：後端在寫入歷史記錄時未保留線上封包中的 `sender_name`（發送者 identity hash 前 8 碼）。`status === 'send_pending'` 為目前唯一可靠的自／他訊息判斷依據。
 
 ---
 
