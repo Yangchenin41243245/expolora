@@ -436,10 +436,20 @@ export default function ChatScreen() {
 
   // ── GiftedChat 渲染函式 ───────────────────────────────────────────────────
 
+  const openLocationMap = useCallback((location: LocationPayload) => {
+    router.push({
+      pathname: '/location-map' as never,
+      params: {
+        latitude: String(location.latitude),
+        longitude: String(location.longitude),
+      },
+    });
+  }, []);
+
   const renderCustomView = (props: any) => {
     const msg = props.currentMessage as LocationMessage;
     if (!msg?.location) return null;
-    return <LocationMessageBubble currentMessage={msg} />;
+    return <LocationMessageBubble currentMessage={msg} onPress={openLocationMap} />;
   };
 
   const renderMessageText = (props: any) => {
