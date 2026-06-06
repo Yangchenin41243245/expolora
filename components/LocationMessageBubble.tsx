@@ -5,7 +5,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import MapboxGL from '@rnmapbox/maps';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   LOCATION_MAP_SIZE,
@@ -13,7 +13,7 @@ import {
   MAP_STYLE_URL,
   MAPBOX_ACCESS_TOKEN,
 } from '../constants/mapbox';
-import type { LocationMessage, OfflineStatus } from '../types/chat';
+import type { LocationMessage, LocationPayload, OfflineStatus } from '../types/chat';
 import { ensureOfflineTiles } from '../utils/location';
 
 // ── Mapbox init ─────────────────────────────────────────────────────────────
@@ -24,6 +24,7 @@ MapboxGL.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
 type Props = {
   currentMessage: LocationMessage;
+  onPress?: (location: LocationPayload) => void;
 };
 
 // ── Fallback UI ─────────────────────────────────────────────────────────────
@@ -62,7 +63,7 @@ const StatusBadge: React.FC<{ status?: OfflineStatus }> = ({ status }) => {
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-const LocationMessageBubble: React.FC<Props> = ({ currentMessage }) => {
+const LocationMessageBubble: React.FC<Props> = ({ currentMessage, onPress }) => {
   const { location, offlineStatus } = currentMessage;
   const [mapError, setMapError] = useState(false);
 
@@ -76,12 +77,25 @@ const LocationMessageBubble: React.FC<Props> = ({ currentMessage }) => {
   if (!location) return null;
 
   const { latitude, longitude } = location;
+  const canOpenMap = !!onPress;
+  const openMapLabel = `Open map at ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+  const handleOpenMap = () => {
+    onPress?.({ latitude, longitude });
+  };
 
   // If the Mapbox token is empty or the map has errored, show fallback
   if (!MAPBOX_ACCESS_TOKEN || mapError) {
     return (
       <View style={styles.container}>
-        <FallbackView lat={latitude} lng={longitude} />
+        <Pressable
+          accessibilityLabel={openMapLabel}
+          accessibilityRole={canOpenMap ? 'button' : undefined}
+          disabled={!canOpenMap}
+          onPress={handleOpenMap}
+          style={({ pressed }) => pressed && styles.pressed}
+        >
+          <FallbackView lat={latitude} lng={longitude} />
+        </Pressable>
         <StatusBadge status={offlineStatus} />
       </View>
     );
@@ -122,15 +136,32 @@ const LocationMessageBubble: React.FC<Props> = ({ currentMessage }) => {
         <View style={styles.loadingOverlay} pointerEvents="none">
           <ActivityIndicator size="small" color="rgba(0,0,0,0.15)" />
         </View>
+        {canOpenMap && (
+          <Pressable
+            accessibilityLabel={openMapLabel}
+            accessibilityRole="button"
+            onPress={handleOpenMap}
+            style={({ pressed }) => [
+              styles.mapTapTarget,
+              pressed && styles.mapTapTargetPressed,
+            ]}
+          />
+        )}
       </View>
 
       {/* Coordinate text below the map */}
-      <View style={styles.coordRow}>
+      <Pressable
+        accessibilityLabel={openMapLabel}
+        accessibilityRole={canOpenMap ? 'button' : undefined}
+        disabled={!canOpenMap}
+        onPress={handleOpenMap}
+        style={({ pressed }) => [styles.coordRow, pressed && styles.pressed]}
+      >
         <Ionicons name="navigate" size={12} color="#888" />
         <Text style={styles.coordText}>
           {latitude.toFixed(5)}, {longitude.toFixed(5)}
         </Text>
-      </View>
+      </Pressable>
 
       <StatusBadge status={offlineStatus} />
     </View>
@@ -160,6 +191,16 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  mapTapTarget: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2,
+  },
+  mapTapTargetPressed: {
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  pressed: {
+    opacity: 0.78,
   },
   pin: {
     alignItems: 'center',
